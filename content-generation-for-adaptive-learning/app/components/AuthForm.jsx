@@ -20,7 +20,7 @@ export default function AuthForm({ type }) {
 
     try {
       const res = await fetch(
-        isLogin ? "http://localhost:8000/api/auth/login" : "http://localhost:8000/api/auth/signup",
+        isLogin ? "/api/login" : "/api/signup",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
