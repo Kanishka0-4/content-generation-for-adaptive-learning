@@ -1,8 +1,22 @@
-"use client";
-
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+import { cookies } from "next/headers";
+import jwt from "jsonwebtoken";
 import Link from "next/link";
 
-export default function HomePage() {
+
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("auth_token")?.value;
+
+  // If token is valid → redirect to dashboard
+  if (token) {
+    try {
+      jwt.verify(token, process.env.JWT_SECRET as string);
+      return <meta httpEquiv="refresh" content="0; url=/dashboard" />;
+    } catch {}
+  }
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-indigo-600 to-purple-800 text-white text-center px-6">
       <h1 className="text-5xl font-extrabold mb-4">
