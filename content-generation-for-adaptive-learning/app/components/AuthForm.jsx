@@ -19,14 +19,11 @@ export default function AuthForm({ type }) {
     setError("");
 
     try {
-      const res = await fetch(
-        isLogin ? "/api/login" : "/api/signup",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        }
-      );
+      const res = await fetch(isLogin ? "/api/login" : "/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Something went wrong");
@@ -34,8 +31,16 @@ export default function AuthForm({ type }) {
       // Save JWT token
       localStorage.setItem("token", data.token);
 
-      // Redirect user
-      router.push(isLogin ? "/dashboard" : "/getting-started");
+      // Redirect based on quiz status
+      if (isLogin) {
+        if (data.quiz_completed === false) {
+          router.push("/quiz/welcome");
+        } else {
+          router.push("/");
+        }
+      } else {
+        router.push("/quiz/welcome");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
