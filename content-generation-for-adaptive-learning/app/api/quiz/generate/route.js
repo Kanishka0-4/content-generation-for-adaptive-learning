@@ -8,22 +8,34 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 /* ===========================================================
-   3 SEPARATE GEMINI CALLS — ONE FOR EACH CONTENT TYPE
+   3 SEPARATE GEMINI CALLS — NOW WITH SUBJECT CONTEXT
    =========================================================== */
 
-async function askGeminiText(topic) {
+async function askGeminiText(topic, subjectName) {
   const prompt = `
-Generate concise educational content for the topic "${topic}".
-Return ONLY JSON in this format:
+You are an educational content generator.
+
+CRITICAL RULES (must follow all):
+1. Generate content STRICTLY in the context of the SUBJECT.
+2. Interpret SUBTOPIC inside the subject domain ONLY.
+3. Explanation must be 120–150 words.
+4. MCQs MUST come ONLY from the explanation text.
+5. Options must be 1–6 words long.
+6. Output must match EXACTLY:
 
 {
-  "text": "40–70 word explanation of the topic",
+  "text": "<120-150 words explanation>",
   "mcqs": [
     {"q":"...", "options":["A","B","C"], "answer":"A"},
     {"q":"...", "options":["A","B","C"], "answer":"B"},
     {"q":"...", "options":["A","B","C"], "answer":"C"}
   ]
 }
+
+SUBJECT: "${subjectName}"
+SUBTOPIC: "${topic}"
+
+Return ONLY JSON. No commentary. No backticks.
 `;
 
   const result = await model.generateContent(prompt);
@@ -36,21 +48,26 @@ Return ONLY JSON in this format:
   return JSON.parse(match[0]);
 }
 
-async function askGeminiAudio(topic) {
+async function askGeminiAudio(topic, subjectName) {
   const prompt = `
-Generate an audio script for topic "${topic}" in 40–70 words.
-Then create 3 MCQs based ONLY on the script.
-
-Return ONLY JSON:
-
+You are an educational content generator.
+CRITICAL RULES (must follow all):
+1. Generate content STRICTLY in the context of the SUBJECT.
+2. Interpret SUBTOPIC inside the subject domain ONLY.
+3. Explanation script must be 120–150 words.
+4. MCQs MUST come ONLY from the explanation script.
+5. Options must be 1–6 words long.
+Generate JSON ONLY:
 {
-  "script": "...",
+  "script": "<120-150 words spoken script for this SUBTOPIC in the context of the SUBJECT>",
   "mcqs": [
     {"q":"...", "options":["A","B","C"], "answer":"A"},
     {"q":"...", "options":["A","B","C"], "answer":"B"},
     {"q":"...", "options":["A","B","C"], "answer":"C"}
   ]
 }
+SUBJECT: "${subjectName}"
+SUBTOPIC: "${topic}"
 `;
 
   const result = await model.generateContent(prompt);
@@ -63,21 +80,26 @@ Return ONLY JSON:
   return JSON.parse(match[0]);
 }
 
-async function askGeminiVisual(topic) {
+async function askGeminiVisual(topic, subjectName) {
   const prompt = `
-Create a 40–70 word visual explanation (flowchart-style description)
-for topic "${topic}". Then 3 MCQs based on ONLY this visual.
-
+You are an educational content generator.
+CRITICAL RULES (must follow all):
+1. Generate content STRICTLY in the context of the SUBJECT.
+2. Interpret SUBTOPIC inside the subject domain ONLY.
+3. Explanation must be 120–150 words.
+4. MCQs MUST come ONLY from the explanation text.
+5. Options must be 1–6 words long.
 Return ONLY JSON:
-
 {
-  "visual": "...",
+  "visual": "<120-150 words flowchart-style description explaining the SUBTOPIC inside SUBJECT context>",
   "mcqs": [
     {"q":"...", "options":["A","B","C"], "answer":"A"},
     {"q":"...", "options":["A","B","C"], "answer":"B"},
     {"q":"...", "options":["A","B","C"], "answer":"C"}
   ]
 }
+SUBJECT: "${subjectName}"
+SUBTOPIC: "${topic}"
 `;
 
   const result = await model.generateContent(prompt);
@@ -109,22 +131,23 @@ export async function POST(req) {
     const userId = decodeAuthToken(token);
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    // ----- Get subtopics -----
-    const st = await pool.query(
-      "SELECT id, name FROM subtopics WHERE subject_id=$1",
-      [subject_id]
-    );
+    // Fetch subject name
+    const subjectRow = await pool.query("SELECT name FROM subjects WHERE id=$1", [subject_id]);
+    const subjectName = subjectRow.rows[0]?.name ?? "";
+
+    // Fetch subtopics
+    const st = await pool.query("SELECT id, name FROM subtopics WHERE subject_id=$1", [subject_id]);
 
     if (st.rows.length < 3)
       return NextResponse.json({ error: "Need at least 3 subtopics" }, { status: 400 });
 
-    // Pick 3 unique random subtopics
+    // Pick 3 subtopics
     const shuffled = st.rows.sort(() => Math.random() - 0.5);
     const topicText = shuffled[0].name;
     const topicAudio = shuffled[1].name;
     const topicVisual = shuffled[2].name;
 
-    // ----- Create quiz entry -----
+    // Create quiz
     const quizRes = await pool.query(
       "INSERT INTO quizzes (user_id, subject_id) VALUES ($1,$2) RETURNING id",
       [userId, subject_id]
@@ -133,7 +156,7 @@ export async function POST(req) {
 
     const items = [];
 
-    // Save content helper
+    // Helper inserts
     async function insertContent(type, text) {
       const r = await pool.query(
         `INSERT INTO quiz_items (quiz_id, content_type, question_text, options, correct_option)
@@ -152,35 +175,26 @@ export async function POST(req) {
       return r.rows[0].id;
     }
 
-    /* ===================================================
-       GENERATE TEXT CONTENT
-       =================================================== */
-    const textBlock = await askGeminiText(topicText);
+    /* ---------- TEXT BLOCK ---------- */
+    const textBlock = await askGeminiText(topicText, subjectName);
     const textId = await insertContent("text", textBlock.text);
     items.push({ id: textId, type: "text" });
-
     for (const q of textBlock.mcqs) {
       items.push({ id: await insertMCQ(q), type: "mcq" });
     }
 
-    /* ===================================================
-       GENERATE AUDIO CONTENT
-       =================================================== */
-    const audioBlock = await askGeminiAudio(topicAudio);
+    /* ---------- AUDIO BLOCK ---------- */
+    const audioBlock = await askGeminiAudio(topicAudio, subjectName);
     const audioId = await insertContent("audio", audioBlock.script);
     items.push({ id: audioId, type: "audio" });
-
     for (const q of audioBlock.mcqs) {
       items.push({ id: await insertMCQ(q), type: "mcq" });
     }
 
-    /* ===================================================
-       GENERATE VISUAL CONTENT
-       =================================================== */
-    const visualBlock = await askGeminiVisual(topicVisual);
+    /* ---------- VISUAL BLOCK ---------- */
+    const visualBlock = await askGeminiVisual(topicVisual, subjectName);
     const visualId = await insertContent("visual", visualBlock.visual);
     items.push({ id: visualId, type: "visual" });
-
     for (const q of visualBlock.mcqs) {
       items.push({ id: await insertMCQ(q), type: "mcq" });
     }
@@ -189,9 +203,6 @@ export async function POST(req) {
 
   } catch (err) {
     console.error("GENERATE QUIZ ERROR:", err);
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

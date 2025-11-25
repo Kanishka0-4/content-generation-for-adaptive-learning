@@ -14,8 +14,12 @@ export default function QuizTakePage() {
   const [pointer, setPointer] = useState(0);
   const [stageType, setStageType] = useState(null);
   const [timer, setTimer] = useState(CONTENT_SECONDS);
+
   const answerStartRef = useRef(null);
 
+  /* ----------------------------------------------------
+     INITIALIZE QUIZ
+  ---------------------------------------------------- */
   useEffect(() => {
     async function init() {
       try {
@@ -32,28 +36,41 @@ export default function QuizTakePage() {
 
         setQuizId(data.quiz_id);
         setItems(data.items);
-        setStageType(data.items[0]?.type || null);
+
+        setPointer(0);
+        setStageType(data.items[0].type);
+        setTimer(CONTENT_SECONDS);
+        answerStartRef.current = Date.now();
+
         setLoading(false);
       } catch (e) {
         alert("Failed to start quiz: " + e.message);
         router.push("/quiz/start");
       }
     }
+
     init();
   }, []);
 
+  /* ----------------------------------------------------
+     TIMER LOGIC
+  ---------------------------------------------------- */
   useEffect(() => {
-    if (loading || stageType === "mcq") return;
+    if (loading) return;
+    if (stageType === "mcq") return;
 
     if (timer <= 0) {
       nextItem();
       return;
     }
 
-    const t = setTimeout(() => setTimer(t => t - 1), 1000);
+    const t = setTimeout(() => setTimer((t) => t - 1), 1000);
     return () => clearTimeout(t);
   }, [timer, stageType, loading]);
 
+  /* ----------------------------------------------------
+     SAVE ANSWER
+  ---------------------------------------------------- */
   async function saveAnswer(opt) {
     const item = items[pointer];
     const now = Date.now();
@@ -66,12 +83,16 @@ export default function QuizTakePage() {
         selected_option: opt,
         time_taken_ms: now - answerStartRef.current,
         quiz_id: quizId,
-      })
+      }),
     });
   }
 
+  /* ----------------------------------------------------
+     NEXT ITEM
+  ---------------------------------------------------- */
   function nextItem() {
     const next = pointer + 1;
+
     if (next >= items.length) {
       router.push("/quiz/results");
       return;
@@ -79,25 +100,80 @@ export default function QuizTakePage() {
 
     setPointer(next);
     setStageType(items[next].type);
+
     setTimer(CONTENT_SECONDS);
     answerStartRef.current = Date.now();
   }
 
-  if (loading) return <div>Preparing quiz...</div>;
+  /* ----------------------------------------------------
+     LOADING SCREEN — Bigger text + spinner
+  ---------------------------------------------------- */
+  if (loading) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100">
+        <div className="text-center text-2xl text-blue-800 flex items-center gap-3 font-semibold">
+          <span>Preparing your quiz…</span>
+
+          {/* ROUND LOADER */}
+          <div className="w-6 h-6 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </div>
+    );
+  }
 
   const current = items[pointer];
 
   return (
-    <div className="p-6">
-      <h2>Quiz ID: {quizId}</h2>
+    <div className="min-h-screen w-full flex justify-center bg-gradient-to-b from-white to-blue-50 py-10 px-4">
 
-      {stageType !== "mcq" && <p>{timer}s left</p>}
+      <div
+        className="w-full max-w-5xl bg-white shadow-lg rounded-lg p-8"
+        style={{
+          width: "90%",
+          border: "3px solid #3b82f6",
+        }}
+      >
 
-      <ItemView id={current.id} type={current.type} onAnswer={opt => { saveAnswer(opt); nextItem(); }} />
+        {/* TOP CENTER TIMER */}
+        {stageType !== "mcq" && (
+          <div className="flex justify-center mb-2">
+            <div className="flex items-center gap-2 text-blue-700 text-lg font-semibold">
+
+              {/* clock icon */}
+              <svg xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className="w-6 h-6 text-blue-700">
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M12 6v6l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+
+              {timer}s
+            </div>
+          </div>
+        )}
+
+        {/* QUIZ TITLE */}
+        <h1 className="text-3xl font-bold text-blue-700 mb-6">Quiz</h1>
+
+        <ItemView
+          id={current.id}
+          type={current.type}
+          onAnswer={(opt) => {
+            saveAnswer(opt);
+            nextItem();
+          }}
+        />
+      </div>
     </div>
   );
 }
 
+/* ----------------------------------------------------
+   ITEM VIEW — content gets light blue background
+---------------------------------------------------- */
 function ItemView({ id, type, onAnswer }) {
   const [data, setData] = useState(null);
 
@@ -112,18 +188,31 @@ function ItemView({ id, type, onAnswer }) {
 
   if (!data) return "Loading...";
 
-  if (type === "mcq") {
+  /* ------------ CONTENT (text/audio/visual) ------------ */
+  if (type !== "mcq") {
     return (
-      <div>
-        <p className="font-semibold mb-3">{data.question_text}</p>
-        {data.options.map(o => (
-          <button key={o} onClick={() => onAnswer(o)} className="block p-2 border mb-2 rounded">
-            {o}
-          </button>
-        ))}
+      <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg text-lg leading-relaxed text-gray-800 shadow-sm">
+        {data.question_text}
       </div>
     );
   }
 
-  return <p>{data.question_text}</p>;
+  /* ------------ MCQ ------------ */
+  return (
+    <div>
+      <p className="font-semibold text-lg mb-4">{data.question_text}</p>
+
+      <div className="space-y-3">
+        {data.options.map((o) => (
+          <button
+            key={o}
+            onClick={() => onAnswer(o)}
+            className="w-full text-left p-4 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-300 transition"
+          >
+            {o}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
