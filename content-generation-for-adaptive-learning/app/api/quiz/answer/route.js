@@ -6,19 +6,30 @@ import { decodeAuthToken } from "@/lib/auth";
 
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { quiz_item_id, selected_option, time_taken_ms } = body;
+    const { quiz_item_id, selected_option, time_taken_ms } = await req.json();
 
-    if (!quiz_item_id || selected_option == null || time_taken_ms == null) {
+    console.log("ANSWER API RECEIVED:", {
+      quiz_item_id,
+      selected_option,
+      time_taken_ms,
+    });
+
+    // ---- VALIDATION ----
+    if (
+      typeof quiz_item_id !== "string" ||
+      typeof selected_option !== "number" ||
+      typeof time_taken_ms !== "number"
+    ) {
       return NextResponse.json(
-        { error: "quiz_item_id, selected_option, time_taken_ms required" },
+        {
+          error: "Invalid payload",
+          received: { quiz_item_id, selected_option, time_taken_ms },
+        },
         { status: 400 }
       );
     }
 
-    // --------------------------
-    // Authenticate the user
-    // --------------------------
+    // ---- AUTH ----
     const cookieStore = await cookies();
     const token = cookieStore.get("auth_token")?.value ?? null;
     const userId = decodeAuthToken(token);
@@ -27,13 +38,13 @@ export async function POST(req) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // --------------------------
-    // Fetch correct answer from DB
-    // --------------------------
-    const itemRes = await pool.query(
-      `SELECT correct_option FROM quiz_items WHERE id = $1`,
-      [quiz_item_id]
-    );
+    // ---- FETCH CORRECT OPTION ----
+   const itemRes = await pool.query({
+  text: "SELECT correct_option FROM quiz_items WHERE id = $1",
+  values: [quiz_item_id],
+  statement_timeout: 5000, // 5 seconds
+});
+
 
     if (itemRes.rows.length === 0) {
       return NextResponse.json(
@@ -44,24 +55,35 @@ export async function POST(req) {
 
     const correct_option = itemRes.rows[0].correct_option;
 
-    // Compare answers
     const is_correct = selected_option === correct_option;
 
-    // --------------------------
-    // Save answer
-    // --------------------------
+    console.log("INSERTING ANSWER:", {
+      quiz_item_id,
+      userId,
+      selected_option,
+      is_correct,
+      time_taken_ms,
+    });
+
+    // ---- INSERT ----
     await pool.query(
-      `INSERT INTO quiz_answers 
-       (quiz_item_id, user_id, selected_option, is_correct, time_taken_ms)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [quiz_item_id, userId, selected_option, is_correct, time_taken_ms]
+      `INSERT INTO quiz_answers
+       (quiz_item_id, user_id, selected_option, is_correct, time_taken_ms, answered_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [
+        quiz_item_id,
+        userId,
+        selected_option,
+        is_correct,
+        time_taken_ms,
+      ]
     );
 
     return NextResponse.json({ success: true, is_correct });
   } catch (err) {
-    console.error("SAVE ANSWER ERROR:", err);
+    console.error("ANSWER INSERT FAILED:", err);
     return NextResponse.json(
-      { error: "Server error", details: err.message },
+      { error: err.message },
       { status: 500 }
     );
   }

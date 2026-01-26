@@ -30,10 +30,8 @@ export async function POST(req) {
         });
       }
 
-      // Generate via gemini
+      // Generate via ollama
       const generated = await generateSubtopics(subject_name, 10);
-      // 8-12 recommended
-      // Basic validation & dedupe
       const unique = Array.from(new Set(generated)).slice(0, 12);
 
       // Insert transactionally

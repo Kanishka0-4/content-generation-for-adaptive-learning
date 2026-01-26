@@ -1,25 +1,30 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
-// Gemini 2.0 Flash – free & available for all new keys
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+// "Instant" is faster/cheaper for simple lists
+const MODEL = "llama-3.1-8b-instant"; 
 
 export async function generateSubtopics(subject, count = 8) {
   const prompt = `
-Generate ${count} subtopics for the subject "${subject}".
-Return ONLY a JSON array of short strings. Example:
-["topic1", "topic2", "topic3"]
+Return ONLY a JSON array of ${count} short subtopics for:
+"${subject}"
+
+Example:
+["Topic 1", "Topic 2", "Topic 3"]
 `;
 
-  const result = await model.generateContent(prompt);
+  const completion = await groq.chat.completions.create({
+    model: MODEL,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.4,
+  });
 
-  const text = result.response.text().trim();
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    const match = text.match(/\[[\s\S]*\]/);
-    return match ? JSON.parse(match[0]) : [];
-  }
+  const text = completion.choices[0].message.content;
+  
+  // Basic parsing in case Groq adds extra text
+  const match = text.match(/\[[\s\S]*\]/);
+  return match ? JSON.parse(match[0]) : [];
 }
