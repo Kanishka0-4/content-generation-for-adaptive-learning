@@ -7,6 +7,7 @@ import Groq from "groq-sdk";
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const MODEL_NAME = "llama-3.3-70b-versatile";
 
+/* ================= GROQ CALL ================= */
 async function askGroq(prompt) {
   const chatCompletion = await groq.chat.completions.create({
     messages: [{ role: "user", content: prompt }],
@@ -17,66 +18,146 @@ async function askGroq(prompt) {
   return JSON.parse(chatCompletion.choices[0]?.message?.content || "{}");
 }
 
+/* ================= CONTENT GENERATORS ================= */
 async function generateTextContent(topic, subjectName) {
-  const prompt = `You are an educational generator. SUBJECT: "${subjectName}", SUBTOPIC: "${topic}". Explain in 120-150 words. Provide 3 MCQs. JSON: { "text": "...", "mcqs": [{"q":"...", "options":["A","B","C"], "answer":"A"}] }`;
+  const prompt = `
+SUBJECT: "${subjectName}"
+SUBTOPIC: "${topic}"
+
+Write a clear explanation (120–150 words).
+ONLY include concepts you will test.
+
+Then generate EXACTLY 3 MCQs.
+MCQs must be answerable ONLY from the explanation.
+DO NOT introduce new algorithms or ideas.
+
+JSON:
+{
+  "text": "...",
+  "mcqs": [
+    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+  ]
+}
+`;
   return await askGroq(prompt);
 }
 
 async function generateAudioContent(topic, subjectName) {
-  const prompt = `You are an educational generator. SUBJECT: "${subjectName}", SUBTOPIC: "${topic}". Write a spoken explanation (120-150 words). Provide 3 MCQs. JSON: { "script": "...", "mcqs": [{"q":"...", "options":["A","B","C"], "answer":"A"}] }`;
-  return await askGroq(prompt);
-}
-
-/* ✅ FIXED: Visual now explicitly requires 3 MCQs */
-async function generateVisualContent(topic, subjectName) {
   const prompt = `
-You are an educational generator.
-
 SUBJECT: "${subjectName}"
 SUBTOPIC: "${topic}"
 
-Explain the concept visually using STEPS.
-Each step should be short and simple.
+Write a spoken explanation (120–150 words).
+ONLY include concepts you will test.
 
-IMPORTANT:
-- You MUST generate EXACTLY 3 MCQs.
+Then generate EXACTLY 3 MCQs.
+MCQs must NOT introduce new concepts.
+
+JSON:
+{
+  "script": "...",
+  "mcqs": [
+    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+  ]
+}
+`;
+  return await askGroq(prompt);
+}
+
+async function generateVisualContent(topic, subjectName) {
+  const prompt = `
+SUBJECT: "${subjectName}"
+SUBTOPIC: "${topic}"
+
+Explain visually using simple steps.
+ONLY include steps you will test.
+
+Generate EXACTLY 3 MCQs based ONLY on the steps.
 
 JSON:
 {
   "steps": ["Step 1", "Step 2", "Step 3"],
   "mcqs": [
-    {"q":"...", "options":["A","B","C"], "answer":"A"},
-    {"q":"...", "options":["A","B","C"], "answer":"A"},
-    {"q":"...", "options":["A","B","C"], "answer":"A"}
+    { "q": "...", "options": ["A","B","C"], "answer": "A" }
   ]
-}`;
+}
+`;
   return await askGroq(prompt);
 }
 
+/* ================= MCQ SCOPE CHECK ================= */
+function isMcqInScope(contentText, mcq) {
+  const content = contentText.toLowerCase();
+  const mcqText = (mcq.q + " " + mcq.options.join(" ")).toLowerCase();
+
+  const words = mcqText.match(/\b[a-z]{5,}\b/g) || [];
+
+  for (const w of words) {
+    if (!content.includes(w)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* ================= MCQ REGENERATION ================= */
+async function regenerateMcqsFromContent(contentText) {
+  const prompt = `
+Based ONLY on the following content, generate EXACTLY 3 MCQs.
+
+CONTENT:
+"""
+${contentText}
+"""
+
+RULES:
+- Questions must be answerable ONLY from the content
+- Do NOT introduce new concepts
+- Do NOT assume prior knowledge
+
+JSON:
+{
+  "mcqs": [
+    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+  ]
+}
+`;
+  const res = await askGroq(prompt);
+  return res.mcqs || [];
+}
+
+/* ================= API HANDLER ================= */
 export async function POST(req) {
   try {
     const { subject_id } = await req.json();
+
     const cookieStore = await cookies();
     const userId = decodeAuthToken(cookieStore.get("auth_token")?.value);
-    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
+    /* ===== SUBJECT ===== */
     const subjectRow = await pool.query(
       "SELECT name FROM subjects WHERE id=$1",
       [subject_id]
     );
     const subjectName = subjectRow.rows[0]?.name ?? "";
 
+    /* ===== SUBTOPICS ===== */
     const st = await pool.query(
       "SELECT name FROM subtopics WHERE subject_id=$1",
       [subject_id]
     );
     const shuffled = st.rows.sort(() => Math.random() - 0.5);
+
     const [topicText, topicAudio, topicVisual] = [
       shuffled[0].name,
       shuffled[1].name,
       shuffled[2].name,
     ];
 
+    /* ===== QUIZ ===== */
     const quizRes = await pool.query(
       "INSERT INTO quizzes (user_id, subject_id) VALUES ($1,$2) RETURNING id",
       [userId, subject_id]
@@ -87,7 +168,8 @@ export async function POST(req) {
 
     async function saveItem(type, text, options = [], correct = null) {
       const answerMap = { A: 0, B: 1, C: 2 };
-      const correctIdx = correct !== null ? answerMap[correct] ?? 0 : null;
+      const correctIdx =
+        correct !== null ? answerMap[correct] ?? 0 : null;
 
       const r = await pool.query(
         `INSERT INTO quiz_items
@@ -100,28 +182,54 @@ export async function POST(req) {
       return { id: r.rows[0].id, type, question_text: text, options };
     }
 
+    /* ================= TEXT ================= */
     const textData = await generateTextContent(topicText, subjectName);
     items.push(await saveItem("text", textData.text));
-    for (const q of textData.mcqs)
-      items.push(await saveItem("mcq", q.q, q.options, q.answer));
 
+    let textMcqs = textData.mcqs.filter(q =>
+      isMcqInScope(textData.text, q)
+    );
+    if (textMcqs.length < 3) {
+      textMcqs = await regenerateMcqsFromContent(textData.text);
+    }
+    for (const q of textMcqs.slice(0, 3)) {
+      items.push(await saveItem("mcq", q.q, q.options, q.answer));
+    }
+
+    /* ================= AUDIO ================= */
     const audioData = await generateAudioContent(topicAudio, subjectName);
     items.push(await saveItem("audio", audioData.script));
-    for (const q of audioData.mcqs)
-      items.push(await saveItem("mcq", q.q, q.options, q.answer));
 
+    let audioMcqs = audioData.mcqs.filter(q =>
+      isMcqInScope(audioData.script, q)
+    );
+    if (audioMcqs.length < 3) {
+      audioMcqs = await regenerateMcqsFromContent(audioData.script);
+    }
+    for (const q of audioMcqs.slice(0, 3)) {
+      items.push(await saveItem("mcq", q.q, q.options, q.answer));
+    }
+
+    /* ================= VISUAL ================= */
     const visualData = await generateVisualContent(topicVisual, subjectName);
     items.push(
-      await saveItem(
-        "visual",
-        JSON.stringify({ steps: visualData.steps })
-      )
+      await saveItem("visual", JSON.stringify({ steps: visualData.steps }))
     );
-    for (const q of visualData.mcqs)
+
+    const visualText = visualData.steps.join(" ");
+    let visualMcqs = visualData.mcqs.filter(q =>
+      isMcqInScope(visualText, q)
+    );
+    if (visualMcqs.length < 3) {
+      visualMcqs = await regenerateMcqsFromContent(visualText);
+    }
+    for (const q of visualMcqs.slice(0, 3)) {
       items.push(await saveItem("mcq", q.q, q.options, q.answer));
+    }
 
     return NextResponse.json({ success: true, quiz_id: quizId, items });
   } catch (err) {
+    console.error(err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}
+}  

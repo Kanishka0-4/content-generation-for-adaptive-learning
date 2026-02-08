@@ -39,12 +39,10 @@ export async function POST(req) {
     }
 
     // ---- FETCH CORRECT OPTION ----
-   const itemRes = await pool.query({
-  text: "SELECT correct_option FROM quiz_items WHERE id = $1",
-  values: [quiz_item_id],
-  statement_timeout: 5000, // 5 seconds
-});
-
+    const itemRes = await pool.query(
+      "SELECT correct_option FROM quiz_items WHERE id = $1",
+      [quiz_item_id]
+    );
 
     if (itemRes.rows.length === 0) {
       return NextResponse.json(
