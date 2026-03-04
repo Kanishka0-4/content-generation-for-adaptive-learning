@@ -1,0 +1,78 @@
+import { NextResponse } from "next/server";
+import { Pool } from "pg";
+
+/* ---------------- DATABASE ---------------- */
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+/* ---------------- GET SUBJECT + MODULES ---------------- */
+
+export async function GET(
+  _req: Request,
+  context: { params: Promise<{ id: string }> } // 👈 params is async
+) {
+  const { id } = await context.params; // 👈 MUST await
+  const subjectId = Number(id);
+
+  if (isNaN(subjectId)) {
+    return NextResponse.json(
+      { error: "Invalid subject id" },
+      { status: 400 }
+    );
+  }
+
+  const client = await pool.connect();
+
+  try {
+    /* -------- 1️⃣ Get subject -------- */
+
+    const subjectRes = await client.query(
+      `
+      SELECT id, title, exam, total_duration
+      FROM module_subjects
+      WHERE id = $1
+      `,
+      [subjectId]
+    );
+
+    if (subjectRes.rows.length === 0) {
+      return NextResponse.json(
+        { error: "Subject not found" },
+        { status: 404 }
+      );
+    }
+
+    /* -------- 2️⃣ Get modules -------- */
+
+    const modulesRes = await client.query(
+      `
+      SELECT
+        module_order,
+        title,
+        goal,
+        topics
+      FROM modules
+      WHERE course_id = $1
+      ORDER BY module_order ASC
+      `,
+      [subjectId]
+    );
+
+    return NextResponse.json({
+      subject: subjectRes.rows[0],
+      modules: modulesRes.rows,
+    });
+
+  } catch (error) {
+    console.error("❌ FETCH SUBJECT FAILED:", error);
+    return NextResponse.json(
+      { error: "Failed to load subject" },
+      { status: 500 }
+    );
+  } finally {
+    client.release();
+  }
+}
