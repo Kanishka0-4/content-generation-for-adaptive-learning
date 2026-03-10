@@ -1,36 +1,49 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY!,
+});
 
 /**
- * Uses a tiny LLM prompt to infer a canonical subject title
- * from roadmap module titles.
+ * Infers a canonical subject title from roadmap modules
  */
 export async function inferSubjectTitleFromRoadmap(roadmap: any[]) {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-  });
+  try {
+    const moduleTitles = roadmap
+      .slice(0, 3)
+      .map((m: any, i: number) => `${i + 1}. ${m.week || m.title}`)
+      .join("\n");
 
-  const moduleTitles = roadmap
-    .slice(0, 3)
-    .map((m: any, i: number) => `${i + 1}. ${m.week || m.title}`)
-    .join("\n");
-
-  const prompt = `
+    const prompt = `
 Given the following study modules:
 
 ${moduleTitles}
 
 Return a SHORT canonical subject name (2–4 words max).
+
 Rules:
 - No extra text
 - No punctuation
 - No exam names
 `;
 
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().trim();
+    const completion = await groq.chat.completions.create({
+      model: "llama3-70b-8192",
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+      temperature: 0.2,
+      max_tokens: 10,
+    });
 
-  // Safety fallback
-  return text || "General Subject";
+    const text = completion.choices[0]?.message?.content?.trim();
+
+    return text || "General Subject";
+  } catch (err) {
+    console.error("Subject title inference failed:", err);
+    return "General Subject";
+  }
 }

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
-
-// 🔹 LLM services
+import { cookies } from "next/headers";
+import { decodeAuthToken } from "@/lib/auth";
 import { generateModuleOneContent } from "../../../llm-service/generateModuleOneContent";
-import { inferSubjectTitleFromRoadmap } from "../../../llm-service/inferSubjectTitle";
 
 /* ---------------- DATABASE ---------------- */
 
@@ -14,146 +13,151 @@ const pool = new Pool({
 
 /* ---------------- ROUTE ---------------- */
 
-export async function POST(request: Request) {
+export async function POST(req: Request) {
+
   const client = await pool.connect();
 
   try {
-    const {
-      roadmap,
-      userId,
-      userQuery, // original user prompt (chat seed)
-      exam,
-    } = await request.json();
 
-    /* -------- Validation -------- */
+    const { roadmap, subjectTitle, duration, exam } = await req.json();
 
     if (!Array.isArray(roadmap) || roadmap.length === 0) {
       return NextResponse.json(
-        { error: "Roadmap must be a non-empty array" },
+        { error: "Invalid roadmap" },
         { status: 400 }
       );
     }
+
+    /* ---------- AUTH ---------- */
+
+    const cookieStore = cookies();
+    const token = (await cookieStore).get("auth_token")?.value;
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Unauthorized: token missing" },
+        { status: 401 }
+      );
+    }
+
+    const userId = decodeAuthToken(token);
 
     if (!userId) {
       return NextResponse.json(
-        { error: "Missing userId" },
-        { status: 400 }
+        { error: "Unauthorized: invalid token" },
+        { status: 401 }
       );
     }
 
-    /* -------- Derive Duration (SOURCE OF TRUTH) -------- */
+    const totalDuration =
+      duration ?? `${roadmap.length} weeks`;
 
-    const totalDuration = `${roadmap.length} weeks`;
-
-    /* -------- Infer Subject Title (safe) -------- */
-
-    let subjectTitle = "Untitled Subject";
-
-    try {
-      subjectTitle = await inferSubjectTitleFromRoadmap(roadmap);
-    } catch (err) {
-      console.warn("⚠️ Subject title inference failed, using fallback");
-    }
-
-    /* -------- Transaction Start -------- */
+    /* ---------- TRANSACTION ---------- */
 
     await client.query("BEGIN");
 
-    /* -------- 1️⃣ Create Subject -------- */
+    /* ---------- CREATE SUBJECT ---------- */
 
     const subjectRes = await client.query(
       `
-      INSERT INTO module_subjects (user_id, title, exam, total_duration)
+      INSERT INTO module_subjects
+      (user_id, title, exam, total_duration)
       VALUES ($1, $2, $3, $4)
       RETURNING id
       `,
       [userId, subjectTitle, exam ?? null, totalDuration]
     );
 
-    const subjectId: number = subjectRes.rows[0].id;
+    const subjectId = subjectRes.rows[0].id;
 
-    console.log("📘 SUBJECT CREATED:", subjectId, subjectTitle);
-
-    /* -------- 2️⃣ Save Initial User Query (Chat Seed) -------- */
-
-    if (userQuery && typeof userQuery === "string") {
-      await client.query(
-        `
-        INSERT INTO subject_chat (subject_id, role, message)
-        VALUES ($1, 'user', $2)
-        `,
-        [subjectId, userQuery]
-      );
-    }
-
-    /* -------- 3️⃣ Insert Modules -------- */
+    /* ---------- INSERT MODULES ---------- */
 
     for (let i = 0; i < roadmap.length; i++) {
-      const mod = roadmap[i];
 
-      console.log("🧩 INSERTING MODULE:", mod.week);
+      const mod = roadmap[i];
 
       await client.query(
         `
-        INSERT INTO modules (
-          course_id,
-          module_order,
-          title,
-          goal,
-          topics
-        )
+        INSERT INTO modules
+        (course_id, module_order, title, goal, topics)
         VALUES ($1, $2, $3, $4, $5)
         `,
         [
-          subjectId,                // FK → module_subjects.id
+          subjectId,
           i + 1,
-          mod.week ?? `Module ${i + 1}`,
-          mod.expected_outcome ?? "",
-          mod.subtopics ?? [],
+          mod.week,
+          mod.expected_outcome,
+          mod.focus_topics
         ]
       );
+
+      /* ---------- INSERT SUBTOPICS ---------- */
+
+      for (let j = 0; j < mod.subtopics.length; j++) {
+
+        await client.query(
+          `
+          INSERT INTO module_subtopics
+          (subject_id, module_order, subtopic_order, title)
+          VALUES ($1, $2, $3, $4)
+          `,
+          [
+            subjectId,
+            i + 1,
+            j + 1,
+            mod.subtopics[j]
+          ]
+        );
+
+      }
+
     }
 
-    /* -------- Commit DB -------- */
+    /* ---------- COMMIT ---------- */
 
     await client.query("COMMIT");
-    console.log("✅ ROADMAP SAVED SUCCESSFULLY");
 
-    /* -------- 4️⃣ Trigger Module 1 Content (Fire & Forget) -------- */
+    console.log("✅ ROADMAP SAVED");
 
-    // IMPORTANT: do NOT await this
+    /* ---------- GENERATE MODULE 1 CONTENT ---------- */
+
     try {
+
       generateModuleOneContent({
         subjectId,
         subjectTitle,
-        module: {
-          title: roadmap[0].week,
-          topics: roadmap[0].subtopics ?? [],
-          expected_outcome: roadmap[0].expected_outcome ?? "",
-        },
+        module: roadmap[0]
       });
+
+      console.log("🤖 Generating Module 1 content…");
+
     } catch (err) {
-      console.warn("⚠️ Module 1 generation failed (non-blocking)");
+
+      console.warn("⚠️ Module content generation failed", err);
+
     }
 
-    /* -------- Response -------- */
+    /* ---------- RESPONSE ---------- */
 
     return NextResponse.json({
       success: true,
-      subjectId,
-      subjectTitle,
-      total_duration: totalDuration,
+      subjectId
     });
 
   } catch (error) {
+
     await client.query("ROLLBACK");
+
     console.error("❌ SAVE ROADMAP FAILED:", error);
 
     return NextResponse.json(
       { error: "Failed to save roadmap" },
       { status: 500 }
     );
+
   } finally {
+
     client.release();
+
   }
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 
-const CONTENT_SECONDS = 10;
+const CONTENT_SECONDS = 15;
 
 /* ===== Browser TTS ===== */
 function speak(text, onEnd) {
@@ -29,7 +29,7 @@ export default function QuizTakePage() {
 
   const answerStartRef = useRef(null);
 
-  // ✅ FIX #1: prevents double quiz generation in React Strict Mode
+  /* prevent double execution (Strict Mode fix) */
   const initializedRef = useRef(false);
 
   /* ===== INIT QUIZ ===== */
@@ -49,7 +49,18 @@ export default function QuizTakePage() {
 
       const data = await res.json();
 
-      const firstContentIndex = data.items.findIndex((i) => i.type !== "mcq");
+      /* ===== SAFETY CHECK ===== */
+      if (!data || !Array.isArray(data.items)) {
+        console.error("Quiz API returned invalid response:", data);
+        alert("Quiz generation failed. Check server logs.");
+        router.push("/dashboard");
+        return;
+      }
+
+      /* ===== FIRST CONTENT INDEX ===== */
+      const firstContentIndex = data.items.findIndex(
+        (i) => i.type !== "mcq"
+      );
 
       localStorage.setItem("current_quiz_id", data.quiz_id);
 
@@ -149,13 +160,21 @@ export default function QuizTakePage() {
       >
         {stageType !== "mcq" && stageType !== "audio" && (
           <div className="flex justify-center mb-2">
-            <div className="text-blue-700 text-lg font-semibold">{timer}s</div>
+            <div className="text-blue-700 text-lg font-semibold">
+              {timer}s
+            </div>
           </div>
         )}
 
-        <h1 className="text-3xl font-bold text-blue-700 mb-6">Quiz</h1>
+        <h1 className="text-3xl font-bold text-blue-700 mb-6">
+          Quiz
+        </h1>
 
-        <ItemView item={current} onNext={nextItem} onSaveAnswer={saveAnswer} />
+        <ItemView
+          item={current}
+          onNext={nextItem}
+          onSaveAnswer={saveAnswer}
+        />
       </div>
     </div>
   );
@@ -220,7 +239,9 @@ function ItemView({ item, onNext, onSaveAnswer }) {
   /* ===== MCQ ===== */
   return (
     <div>
-      <p className="font-semibold text-lg mb-4">{item.question_text}</p>
+      <p className="font-semibold text-lg mb-4">
+        {item.question_text}
+      </p>
       <div className="space-y-3">
         {item.options.map((o, idx) => (
           <button

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
+import { cookies } from "next/headers";
+import { decodeAuthToken } from "@/lib/auth";
 
 /* ---------------- DATABASE ---------------- */
 
@@ -12,9 +14,10 @@ const pool = new Pool({
 
 export async function GET(
   _req: Request,
-  context: { params: Promise<{ id: string }> } // 👈 params is async
+  context: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await context.params; // 👈 MUST await
+
+  const { id } = await context.params;
   const subjectId = Number(id);
 
   if (isNaN(subjectId)) {
@@ -24,18 +27,40 @@ export async function GET(
     );
   }
 
+  /* -------- AUTH -------- */
+
+  const cookieStore = await cookies();
+const token = cookieStore.get("auth_token")?.value;
+
+if (!token) {
+  return NextResponse.json(
+    { error: "Unauthorized" },
+    { status: 401 }
+  );
+}
+
+const userId = decodeAuthToken(token);
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const client = await pool.connect();
 
   try {
-    /* -------- 1️⃣ Get subject -------- */
+
+    /* -------- 1️⃣ Get subject (ONLY IF OWNED BY USER) -------- */
 
     const subjectRes = await client.query(
       `
       SELECT id, title, exam, total_duration
       FROM module_subjects
       WHERE id = $1
+      AND user_id = $2
       `,
-      [subjectId]
+      [subjectId, userId]
     );
 
     if (subjectRes.rows.length === 0) {
@@ -67,12 +92,17 @@ export async function GET(
     });
 
   } catch (error) {
+
     console.error("❌ FETCH SUBJECT FAILED:", error);
+
     return NextResponse.json(
       { error: "Failed to load subject" },
       { status: 500 }
     );
+
   } finally {
+
     client.release();
+
   }
 }

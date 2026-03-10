@@ -1,122 +1,142 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY!,
+});
+
+/* SUBJECT EXTRACTION */
+
+function extractSubjectTitle(query: string) {
+  const cleaned = query
+    .replace(/\bin\s+\d+\s*(weeks?|months?|days?)\b/i, "")
+    .replace(/\b(class\s*\d+|cbse|icse|gate|jee|neet|upsc|net|jam)\b/gi, "")
+    .replace(/\b(learn|study|prepare|roadmap|course|for)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = cleaned.split(" ");
+
+  return words
+    .slice(0, 3)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function extractDuration(query: string) {
+  const match = query.match(/\d+\s*(weeks?|months?|days?)/i);
+  return match ? match[0] : null;
+}
+
+async function generateRoadmap(prompt: string) {
+
+  const completion = await groq.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    messages: [
+      { role: "system", content: "You are an academic planner. Output STRICT JSON only." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.4
+  });
+
+  let text = completion.choices?.[0]?.message?.content ?? "";
+
+  text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+  return JSON.parse(text);
+}
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const message = body?.message;
 
-    // -------- 1. Validate input --------
-    if (!message || typeof message !== "string") {
+  try {
+
+    const { message } = await req.json();
+
+    if (!message) {
       return NextResponse.json(
-        { error: "Invalid input" },
+        { error: "Invalid message" },
         { status: 400 }
       );
     }
 
-    // -------- 2. Get model --------
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
-    });
+    const subjectTitle = extractSubjectTitle(message);
+    const duration = extractDuration(message);
 
-    // -------- 3. Prompt --------
     const prompt = `
-You are an academic study-planner assistant.
+Create a structured study roadmap.
 
-TASK:
-Create a PRACTICAL, WEEK-BY-WEEK study roadmap.
+IMPORTANT RULES:
 
-RULES:
-- If a known exam (GATE, JAM, NET, JEE, etc.) is mentioned, STRICTLY follow the official syllabus.
-- If the subject is broad, assume standard undergraduate coverage.
-- Each week must be realistic and not overloaded.
-- Include revision and problem-solving where relevant.
-- Output MUST be ONLY valid JSON.
+1. If a known exam is mentioned (for example GATE, JEE, UPSC, NET, etc.), organize the roadmap according to the major sections of that exam syllabus.
 
-FORMAT (STRICT):
-Return a JSON ARRAY. Each element must be:
+   Example:
+   - GATE Chemistry → Physical Chemistry, Organic Chemistry, Inorganic Chemistry, Spectroscopy, Mathematics, Practice/Revision.
+   - GATE Computer Science → Algorithms, Data Structures, Operating Systems, DBMS, Computer Networks, Practice.
 
+2. If no exam is mentioned, organize modules according to standard undergraduate subject structure used in universities.
+When preparing for an exam, ensure that all major syllabus areas of that exam are represented across the modules.
+Do not omit major sections of the syllabus.
+
+3. Adapt the roadmap to the given time duration:
+   - If the duration is short → prioritize the most important or high-weight topics.
+   - If the duration is long → cover the full syllabus.
+   - If preparing for an exam → include practice, revision, and previous year questions.
+
+4. Modules represent major topic areas.
+
+Ensure that all major syllabus areas of the exam are included. 
+For example, GATE Computer Science must include:
+Discrete Mathematics, Data Structures, Algorithms, Computer Organization, Operating Systems, Databases, Computer Networks, Theory of Computation, and Compiler Design.
+
+5. Each module must contain:
+   - focus_topics → main chapters or units
+   - subtopics → specific concepts inside those topics
+   - expected_outcome → what the learner should understand after completing the module.
+
+STRUCTURE RULES:
+- Each module must contain focus_topics and subtopics
+
+OUTPUT FORMAT (RETURN ONLY VALID JSON):
+
+[
 {
-  "week": "Module 1",
-  "focus_topics": ["Topic A", "Topic B"],
-  "subtopics": ["Subtopic 1", "Subtopic 2"],
-  "expected_outcome": "Clear measurable outcome"
+"week": "Module name",
+"focus_topics": [],
+"subtopics": [],
+"expected_outcome": ""
 }
+]
 
-IMPORTANT:
-- focus_topics must ALWAYS be an array
-- subtopics must ALWAYS be an array
-- No extra text outside JSON
+SUBJECT:
+${subjectTitle}
 
 USER REQUEST:
 ${message}
 `;
 
-    // -------- 4. Generate --------
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.4,
-      },
-    });
-
-    // -------- 5. Parse --------
-    const raw = JSON.parse(result.response.text());
+    const raw = await generateRoadmap(prompt);
 
     if (!Array.isArray(raw)) {
-      return NextResponse.json(
-        { error: "Invalid roadmap format from model" },
-        { status: 500 }
-      );
+      throw new Error("Invalid roadmap format");
     }
 
-    // -------- 6. Normalize (CRITICAL) --------
-    const normalized = raw.map((w: any, i: number) => ({
-      week: typeof w.week === "string" ? w.week : `Week ${i + 1}`,
-
-      focus_topics: Array.isArray(w.focus_topics)
-        ? w.focus_topics
-        : typeof w.focus_topics === "string"
-        ? [w.focus_topics]
-        : [],
-
-      subtopics: Array.isArray(w.subtopics)
-        ? w.subtopics
-        : typeof w.subtopics === "string"
-        ? [w.subtopics]
-        : [],
-
-      expected_outcome:
-        typeof w.expected_outcome === "string"
-          ? w.expected_outcome
-          : "",
+    const roadmap = raw.map((m: any, i: number) => ({
+      week: m.week ?? `Module ${i + 1}`,
+      focus_topics: m.focus_topics ?? [],
+      subtopics: m.subtopics ?? [],
+      expected_outcome: m.expected_outcome ?? "",
     }));
 
-    if (normalized.length === 0) {
-      return NextResponse.json(
-        { error: "Empty roadmap generated" },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json({
+      subjectTitle,
+      duration,
+      roadmap
+    });
 
-    // -------- 7. Success --------
-    return NextResponse.json(normalized, { status: 200 });
-
-  } catch (error: any) {
-    // -------- 8. Rate limit --------
-    if (error?.status === 429) {
-      return NextResponse.json(
-        { error: "Too many requests. Please wait 30 seconds and try again." },
-        { status: 429 }
-      );
-    }
+  } catch (error) {
 
     console.error("Roadmap generation error:", error);
 
-    // -------- 9. Generic failure --------
     return NextResponse.json(
       { error: "Failed to generate roadmap" },
       { status: 500 }
