@@ -30,11 +30,11 @@ export async function POST(req) {
         });
       }
 
-      // Generate via ollama
+      
       const generated = await generateSubtopics(subject_name, 10);
       const unique = Array.from(new Set(generated)).slice(0, 12);
 
-      // Insert transactionally
+      // Insert 
       await client.query("BEGIN");
       const inserted = [];
       const insertSQL =

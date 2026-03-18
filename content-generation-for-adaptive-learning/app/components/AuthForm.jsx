@@ -9,14 +9,86 @@ export default function AuthForm({ type }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+
+  //old function. revert if error occurs
+  /*
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
+*/
+
+const handleChange = (e) => {
+  const updatedForm = {
+    ...form,
+    [e.target.name]: e.target.value,
+  };
+
+  setForm(updatedForm);
+
+  // ✅ Clear error when user types
+  setError("");
+
+  // ✅ OPTIONAL: live validation (better UX)
+  if (e.target.name === "email") {
+    const email = updatedForm.email;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      setError("Invalid email format");
+      return;
+    }
+
+    const allowedDomains = [
+      "gmail.com",
+      "yahoo.com",
+      "outlook.com",
+      "hotmail.com",
+      "icloud.com",
+    ];
+
+    const domain = email.split("@")[1]?.toLowerCase();
+
+    if (domain && !allowedDomains.includes(domain)) {
+      setError("Use Gmail, Yahoo, Outlook, etc.");
+      return;
+    }
+
+    // ✅ If everything is valid → clear error
+    setError("");
+  }
+};
+
+
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(form.email)) {
+      setError("Invalid email format");
+      setLoading(false);
+      return;
+    }
+
+    // ✅ Domain restriction
+    const allowedDomains = [
+      "gmail.com",
+      "yahoo.com",
+      "outlook.com",
+      "hotmail.com",
+      "icloud.com",
+    ];
+
+    const domain = form.email.split("@")[1].toLowerCase();
+
+    if (!allowedDomains.includes(domain)) {
+      setError("Please use a valid email provider (Gmail, Yahoo, Outlook, etc.)");
+      setLoading(false);
+      return;
+    }
 
     try {
       const res = await fetch(isLogin ? "/api/login" : "/api/signup", {

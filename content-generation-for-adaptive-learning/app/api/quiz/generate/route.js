@@ -140,14 +140,14 @@ export async function POST(req) {
     /* ===== SUBJECT ===== */
     const subjectRow = await pool.query(
       "SELECT name FROM subjects WHERE id=$1",
-      [subject_id]
+      [subject_id],
     );
     const subjectName = subjectRow.rows[0]?.name ?? "";
 
     /* ===== SUBTOPICS ===== */
     const st = await pool.query(
       "SELECT name FROM subtopics WHERE subject_id=$1",
-      [subject_id]
+      [subject_id],
     );
     const shuffled = st.rows.sort(() => Math.random() - 0.5);
 
@@ -160,71 +160,72 @@ export async function POST(req) {
     /* ===== QUIZ ===== */
     const quizRes = await pool.query(
       "INSERT INTO quizzes (user_id, subject_id) VALUES ($1,$2) RETURNING id",
-      [userId, subject_id]
+      [userId, subject_id],
     );
     const quizId = quizRes.rows[0].id;
 
     const items = [];
 
-    async function saveItem(type, text, options = [], correct = null) {
+    async function saveItem(
+      type,
+      text,
+      options = [],
+      correct = null,
+      mcq_type = null,
+    ) {
       const answerMap = { A: 0, B: 1, C: 2 };
-      const correctIdx =
-        correct !== null ? answerMap[correct] ?? 0 : null;
+      const correctIdx = correct !== null ? (answerMap[correct] ?? 0) : null;
 
       const r = await pool.query(
         `INSERT INTO quiz_items
-         (quiz_id, content_type, question_text, options, correct_option)
-         VALUES ($1,$2,$3,$4,$5)
+         (quiz_id, content_type, question_text, options, correct_option, mcq_type)
+         VALUES ($1,$2,$3,$4,$5,$6)
          RETURNING id`,
-        [quizId, type, text, JSON.stringify(options), correctIdx]
+        [quizId, type, text, JSON.stringify(options), correctIdx, mcq_type],
       );
 
-      return { id: r.rows[0].id, type, question_text: text, options };
+      return { id: r.rows[0].id, type, question_text: text, options, mcq_type };
     }
 
     /* ================= TEXT ================= */
     const textData = await generateTextContent(topicText, subjectName);
     items.push(await saveItem("text", textData.text));
 
-    let textMcqs = textData.mcqs.filter(q =>
-      isMcqInScope(textData.text, q)
-    );
+    let textMcqs = textData.mcqs.filter((q) => isMcqInScope(textData.text, q));
     if (textMcqs.length < 3) {
       textMcqs = await regenerateMcqsFromContent(textData.text);
     }
     for (const q of textMcqs.slice(0, 3)) {
-      items.push(await saveItem("mcq", q.q, q.options, q.answer));
+      items.push(await saveItem("mcq", q.q, q.options, q.answer, "text"));
     }
 
     /* ================= AUDIO ================= */
     const audioData = await generateAudioContent(topicAudio, subjectName);
     items.push(await saveItem("audio", audioData.script));
 
-    let audioMcqs = audioData.mcqs.filter(q =>
-      isMcqInScope(audioData.script, q)
+    let audioMcqs = audioData.mcqs.filter((q) =>
+      isMcqInScope(audioData.script, q),
     );
     if (audioMcqs.length < 3) {
       audioMcqs = await regenerateMcqsFromContent(audioData.script);
     }
     for (const q of audioMcqs.slice(0, 3)) {
-      items.push(await saveItem("mcq", q.q, q.options, q.answer));
+      items.push(await saveItem("mcq", q.q, q.options, q.answer, "audio"));
     }
 
     /* ================= VISUAL ================= */
     const visualData = await generateVisualContent(topicVisual, subjectName);
     items.push(
-      await saveItem("visual", JSON.stringify({ steps: visualData.steps }))
+      await saveItem("visual", JSON.stringify({ steps: visualData.steps })),
     );
 
     const visualText = visualData.steps.join(" ");
-    let visualMcqs = visualData.mcqs.filter(q =>
-      isMcqInScope(visualText, q)
-    );
+    let visualMcqs = visualData.mcqs.filter((q) => isMcqInScope(visualText, q));
     if (visualMcqs.length < 3) {
       visualMcqs = await regenerateMcqsFromContent(visualText);
     }
     for (const q of visualMcqs.slice(0, 3)) {
-      items.push(await saveItem("mcq", q.q, q.options, q.answer));
+      items.push(await saveItem("mcq", q.q, q.options, q.answer, "visual"));
     }
 
     return NextResponse.json({ success: true, quiz_id: quizId, items });
@@ -232,4 +233,4 @@ export async function POST(req) {
     console.error(err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
-}  
+}

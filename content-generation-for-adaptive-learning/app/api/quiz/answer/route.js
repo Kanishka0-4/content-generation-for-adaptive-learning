@@ -25,7 +25,7 @@ export async function POST(req) {
           error: "Invalid payload",
           received: { quiz_item_id, selected_option, time_taken_ms },
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -41,13 +41,13 @@ export async function POST(req) {
     // ---- FETCH CORRECT OPTION ----
     const itemRes = await pool.query(
       "SELECT correct_option FROM quiz_items WHERE id = $1",
-      [quiz_item_id]
+      [quiz_item_id],
     );
 
     if (itemRes.rows.length === 0) {
       return NextResponse.json(
         { error: "Quiz item not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -60,6 +60,7 @@ export async function POST(req) {
       userId,
       selected_option,
       is_correct,
+      correct_option,
       time_taken_ms,
     });
 
@@ -68,21 +69,12 @@ export async function POST(req) {
       `INSERT INTO quiz_answers
        (quiz_item_id, user_id, selected_option, is_correct, time_taken_ms, answered_at)
        VALUES ($1, $2, $3, $4, $5, NOW())`,
-      [
-        quiz_item_id,
-        userId,
-        selected_option,
-        is_correct,
-        time_taken_ms,
-      ]
+      [quiz_item_id, userId, selected_option, is_correct, time_taken_ms],
     );
 
     return NextResponse.json({ success: true, is_correct });
   } catch (err) {
     console.error("ANSWER INSERT FAILED:", err);
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

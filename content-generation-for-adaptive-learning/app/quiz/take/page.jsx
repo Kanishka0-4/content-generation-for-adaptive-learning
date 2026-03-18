@@ -49,9 +49,7 @@ export default function QuizTakePage() {
 
       const data = await res.json();
 
-      const firstContentIndex = data.items.findIndex(
-        (i) => i.type !== "mcq"
-      );
+      const firstContentIndex = data.items.findIndex((i) => i.type !== "mcq");
 
       localStorage.setItem("current_quiz_id", data.quiz_id);
 
@@ -151,19 +149,13 @@ export default function QuizTakePage() {
       >
         {stageType !== "mcq" && stageType !== "audio" && (
           <div className="flex justify-center mb-2">
-            <div className="text-blue-700 text-lg font-semibold">
-              {timer}s
-            </div>
+            <div className="text-blue-700 text-lg font-semibold">{timer}s</div>
           </div>
         )}
 
         <h1 className="text-3xl font-bold text-blue-700 mb-6">Quiz</h1>
 
-        <ItemView
-          item={current}
-          onNext={nextItem}
-          onSaveAnswer={saveAnswer}
-        />
+        <ItemView item={current} onNext={nextItem} onSaveAnswer={saveAnswer} />
       </div>
     </div>
   );
@@ -183,7 +175,6 @@ function ItemView({ item, onNext, onSaveAnswer }) {
     return (
       <div className="space-y-4">
         <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg text-lg text-gray-800 shadow-sm">
-
           {item.type === "audio" && (
             <p className="text-gray-600 italic text-sm text-center">
               🎧 Listen to the audio carefully
@@ -221,7 +212,6 @@ function ItemView({ item, onNext, onSaveAnswer }) {
           {item.type !== "audio" && item.type !== "visual" && (
             <p>{item.question_text}</p>
           )}
-
         </div>
       </div>
     );
@@ -247,4 +237,4 @@ function ItemView({ item, onNext, onSaveAnswer }) {
       </div>
     </div>
   );
-} 
+}

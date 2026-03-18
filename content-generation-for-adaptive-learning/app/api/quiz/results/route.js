@@ -1,23 +1,32 @@
 import { NextResponse } from "next/server";
 import { pool } from "@/lib/db";
 
+import { cookies } from "next/headers";
+import { decodeAuthToken } from "@/lib/auth";
+
 export async function POST(req) {
   try {
     const { quiz_id } = await req.json();
+
+    const cookieStore = await cookies();
+    const token = cookieStore.get("auth_token")?.value ?? null;
+    const userId = decodeAuthToken(token);
 
     const rows = await pool.query(
       `
       SELECT
         qi.id,
-        qi.content_type,
+        qi.mcq_type,
         qa.is_correct,
         qa.time_taken_ms
       FROM quiz_items qi
       LEFT JOIN quiz_answers qa ON qa.quiz_item_id = qi.id
-      WHERE qi.quiz_id = $1
-      ORDER BY qi.created_at
+       AND qa.user_id = $2
+  WHERE qi.quiz_id = $1::uuid
+   AND qi.content_type = 'mcq'
+  ORDER BY qi.created_at
       `,
-      [quiz_id]
+      [quiz_id, userId],
     );
 
     // ================= INITIAL STATS =================
@@ -27,22 +36,20 @@ export async function POST(req) {
       visual: { correct: 0, total: 0, time: 0 },
     };
 
-    let currentType = null;
-
-    // ================= COLLECT RAW DATA =================
+    //raw data
     for (const r of rows.rows) {
-      if (r.content_type !== "mcq") {
-        currentType = r.content_type;
-        continue;
+      const type = r.mcq_type;
+
+      if (!type || !stats[type]) continue;
+
+      stats[type].total += 1;
+
+      if (r.time_taken_ms != null) {
+        stats[type].time += r.time_taken_ms;
       }
 
-      if (!currentType || r.time_taken_ms == null) continue;
-
-      stats[currentType].total += 1;
-      stats[currentType].time += r.time_taken_ms;
-
       if (r.is_correct) {
-        stats[currentType].correct += 1;
+        stats[type].correct += 1;
       }
     }
 
@@ -53,32 +60,23 @@ export async function POST(req) {
       visual: 0,
     };
 
+    //score calculation
     for (const type of ["text", "audio", "visual"]) {
-      const TOTAL_QUESTIONS = 3;
-
-      // Clamp correct answers
-      const correct = Math.min(stats[type].correct, TOTAL_QUESTIONS);
+      const total = stats[type].total || 1;
+      const correct = stats[type].correct;
       const time = stats[type].time;
 
-      // 🔒 Force stats to match rule (for UI consistency)
-      stats[type].total = TOTAL_QUESTIONS;
-      stats[type].correct = correct;
+      const accuracy = correct / total;
 
-      const accuracy = correct / TOTAL_QUESTIONS;
+      const avgTime = time > 0 ? time / total / 1000 : 0;
 
-      const avgTime =
-        time > 0 ? (time / TOTAL_QUESTIONS) / 1000 : 0;
+      const speed = avgTime > 0 ? 1 / (1 + avgTime) : 0;
 
-      const speed = avgTime > 0 ? 1 / avgTime : 0;
-
-      // Weighted score
       scores[type] = 0.7 * accuracy + 0.3 * speed;
     }
 
     // ================= BEST LEARNING STYLE =================
-    const best = Object.entries(scores).sort(
-      (a, b) => b[1] - a[1]
-    )[0][0];
+    const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
     return NextResponse.json({
       stats,
@@ -87,9 +85,6 @@ export async function POST(req) {
     });
   } catch (err) {
     console.error("Quiz result error:", err);
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
