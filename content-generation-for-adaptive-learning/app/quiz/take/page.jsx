@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 
 const CONTENT_SECONDS = 15;
 
-/* ===== Browser TTS ===== */
 function speak(text, onEnd) {
   if (!("speechSynthesis" in window)) return;
-
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "en-US";
@@ -19,37 +17,31 @@ function speak(text, onEnd) {
 export default function QuizTakePage() {
   const router = useRouter();
 
-  const [loading, setLoading] = useState(true);
-  const [quizId, setQuizId] = useState(null);
-  const [items, setItems] = useState([]);
-  const [pointer, setPointer] = useState(0);
-  const [stageType, setStageType] = useState(null);
-  const [timer, setTimer] = useState(CONTENT_SECONDS);
+  const [loading, setLoading]         = useState(true);
+  const [quizId, setQuizId]           = useState(null);
+  const [items, setItems]             = useState([]);
+  const [pointer, setPointer]         = useState(0);
+  const [stageType, setStageType]     = useState(null);
+  const [timer, setTimer]             = useState(CONTENT_SECONDS);
   const [contentReady, setContentReady] = useState(false);
 
-  const answerStartRef = useRef(null);
+  const answerStartRef  = useRef(null);
+  const initializedRef  = useRef(false);
 
-  /* prevent double execution (Strict Mode fix) */
-  const initializedRef = useRef(false);
-
-  /* ===== INIT QUIZ ===== */
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
     async function init() {
       const subjectId = localStorage.getItem("selected_subject_id");
-
       const res = await fetch("/api/quiz/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ subject_id: subjectId }),
       });
-
       const data = await res.json();
 
-      /* ===== SAFETY CHECK ===== */
       if (!data || !Array.isArray(data.items)) {
         console.error("Quiz API returned invalid response:", data);
         alert("Quiz generation failed. Check server logs.");
@@ -57,20 +49,14 @@ export default function QuizTakePage() {
         return;
       }
 
-      /* ===== FIRST CONTENT INDEX ===== */
-      const firstContentIndex = data.items.findIndex(
-        (i) => i.type !== "mcq"
-      );
-
+      const firstContentIndex = data.items.findIndex((i) => i.type !== "mcq");
       localStorage.setItem("current_quiz_id", data.quiz_id);
-
       setQuizId(data.quiz_id);
       setItems(data.items);
       setPointer(firstContentIndex);
       setStageType(data.items[firstContentIndex].type);
       setTimer(CONTENT_SECONDS);
       answerStartRef.current = Date.now();
-
       setContentReady(true);
       setLoading(false);
     }
@@ -78,184 +64,418 @@ export default function QuizTakePage() {
     init();
   }, []);
 
-  /* ===== CONTENT TIMER (TEXT / VISUAL ONLY) ===== */
   useEffect(() => {
     if (!contentReady) return;
     if (stageType === "mcq" || stageType === "audio") return;
-
-    if (timer <= 0) {
-      nextItem();
-      return;
-    }
-
-    const t = setTimeout(() => {
-      setTimer((prev) => prev - 1);
-    }, 1000);
-
+    if (timer <= 0) { nextItem(); return; }
+    const t = setTimeout(() => setTimer((p) => p - 1), 1000);
     return () => clearTimeout(t);
   }, [timer, stageType, contentReady]);
 
-  /* ===== SAVE ANSWER ===== */
   async function saveAnswer(selectedIndex) {
     const item = items[pointer];
     if (!item || !item.id) return false;
-
-    const payload = {
-      quiz_item_id: item.id,
-      selected_option: selectedIndex,
-      time_taken_ms: Date.now() - answerStartRef.current,
-    };
-
     const res = await fetch("/api/quiz/answer", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        quiz_item_id: item.id,
+        selected_option: selectedIndex,
+        time_taken_ms: Date.now() - answerStartRef.current,
+      }),
     });
-
-    if (!res.ok) {
-      console.error("Answer save failed");
-      return false;
-    }
-
+    if (!res.ok) { console.error("Answer save failed"); return false; }
     return true;
   }
 
-  /* ===== NEXT ITEM ===== */
   function nextItem() {
     window.speechSynthesis.cancel();
-
     const next = pointer + 1;
-
-    if (next >= items.length) {
-      router.push("/quiz/results");
-      return;
-    }
-
+    if (next >= items.length) { router.push("/quiz/results"); return; }
     setPointer(next);
     setStageType(items[next].type);
     setTimer(CONTENT_SECONDS);
     answerStartRef.current = Date.now();
   }
 
-  /* ===== LOADING ===== */
+  /* ── Loading ── */
   if (loading) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-b from-blue-50 to-blue-100">
-        <div className="text-center text-2xl text-blue-800 flex items-center gap-3 font-semibold">
-          <span>Preparing your quiz…</span>
-          <div className="w-6 h-6 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+      <>
+        <style>{`
+          @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Instrument+Sans:wght@300;400;500&display=swap');
+          @keyframes spin { to { transform: rotate(360deg); } }
+        `}</style>
+        <div style={{
+          minHeight: "100vh", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          background: "#fffaf5", fontFamily: "'Instrument Sans', sans-serif",
+          gap: "1rem",
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: "50%",
+            border: "3px solid #fed7aa", borderTop: "3px solid #f97316",
+            animation: "spin 0.8s linear infinite",
+          }}/>
+          <p style={{ fontSize: "1rem", color: "#92400e", fontWeight: 500 }}>
+            Preparing your quiz…
+          </p>
         </div>
-      </div>
+      </>
     );
   }
 
-  const current = items[pointer];
+  const current    = items[pointer];
+  const progress   = ((pointer + 1) / items.length) * 100;
+  const isContent  = stageType !== "mcq" && stageType !== "audio";
 
   return (
-    <div className="min-h-screen w-full flex justify-center bg-gradient-to-b from-white to-blue-50 py-10 px-4">
-      <div
-        className="w-full max-w-5xl bg-white shadow-lg rounded-lg p-8"
-        style={{ width: "90%", border: "3px solid #3b82f6" }}
-      >
-        {stageType !== "mcq" && stageType !== "audio" && (
-          <div className="flex justify-center mb-2">
-            <div className="text-blue-700 text-lg font-semibold">
-              {timer}s
-            </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Instrument+Sans:wght@300;400;500&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        @keyframes spin  { to { transform: rotate(360deg); } }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes wave {
+          0%, 100% { transform: scaleY(0.5); }
+          50%       { transform: scaleY(1.4); }
+        }
+
+        .qt-root {
+          min-height: 100vh;
+          background: #fffaf5;
+          font-family: 'Instrument Sans', sans-serif;
+          display: flex; flex-direction: column;
+          align-items: center; padding: 0 1.5rem 3rem;
+          position: relative; overflow: hidden;
+        }
+
+        .qt-blob {
+          position: fixed; border-radius: 50%;
+          filter: blur(80px); pointer-events: none; z-index: 0;
+        }
+        .qt-blob-1 { width: 400px; height: 400px; background: #fb923c18; top: -80px; right: -60px; }
+        .qt-blob-2 { width: 350px; height: 350px; background: #3b82f612; bottom: -60px; left: -60px; }
+
+        .qt-topbar {
+          position: relative; z-index: 1;
+          width: 100%; max-width: 680px;
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 1.5rem 0 1.25rem;
+        }
+        .qt-brand {
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-size: 1rem; font-weight: 800;
+          color: #1e293b; letter-spacing: -0.02em;
+          display: flex; align-items: center; gap: 0.4rem;
+        }
+        .qt-brand-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: linear-gradient(135deg, #f97316, #fb923c);
+        }
+        .qt-counter {
+          font-size: 0.78rem; font-weight: 600;
+          color: #94a3b8; letter-spacing: 0.04em;
+        }
+
+        .qt-progress-wrap {
+          position: relative; z-index: 1;
+          width: 100%; max-width: 680px;
+          height: 4px; background: #f1e8dc;
+          border-radius: 99px; margin-bottom: 2rem; overflow: hidden;
+        }
+        .qt-progress-fill {
+          height: 100%; border-radius: 99px;
+          background: linear-gradient(90deg, #f97316, #fb923c);
+          transition: width 0.4s ease;
+        }
+
+        .qt-card {
+          position: relative; z-index: 1;
+          width: 100%; max-width: 680px;
+          background: #fff;
+          border: 1px solid #f1e8dc;
+          border-radius: 20px;
+          padding: 2.5rem 2.25rem;
+          box-shadow: 0 4px 6px rgba(0,0,0,0.03), 0 20px 60px rgba(249,115,22,0.07);
+          animation: fadeUp 0.3s ease both;
+        }
+
+        .qt-badge {
+          display: inline-flex; align-items: center; gap: 0.35rem;
+          padding: 0.28rem 0.75rem; border-radius: 999px;
+          font-size: 0.68rem; font-weight: 700;
+          letter-spacing: 0.07em; text-transform: uppercase;
+          margin-bottom: 1.25rem;
+        }
+        .qt-badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+        .qt-badge-orange { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+        .qt-badge-blue   { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+        .qt-badge-green  { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+
+        .qt-timer {
+          display: flex; align-items: center; justify-content: center;
+          margin-bottom: 1.5rem;
+        }
+        .qt-timer-inner {
+          width: 52px; height: 52px; border-radius: 50%;
+          border: 3px solid #fed7aa;
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-size: 1.1rem; font-weight: 800; color: #f97316;
+          background: #fff7ed;
+        }
+
+        .qt-content-text {
+          font-size: 1rem; color: #334155; line-height: 1.7;
+        }
+
+        .qt-audio-box {
+          display: flex; flex-direction: column;
+          align-items: center; gap: 1rem; padding: 2rem;
+          background: #f0fdf4; border: 1px solid #bbf7d0;
+          border-radius: 14px; text-align: center;
+        }
+        .qt-audio-icon {
+          width: 56px; height: 56px; border-radius: 50%;
+          background: linear-gradient(135deg,#10b981,#34d399);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1.4rem;
+          box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+        }
+        .qt-wave-bar {
+          width: 4px; border-radius: 99px;
+          background: #10b981; opacity: 0.7;
+          animation: wave 0.8s ease-in-out infinite alternate;
+        }
+
+        .qt-visual-steps {
+          display: flex; flex-direction: column; align-items: center;
+        }
+        .qt-step-node { display: flex; flex-direction: column; align-items: center; }
+        .qt-step-circle {
+          width: 44px; height: 44px; border-radius: 50%;
+          background: linear-gradient(135deg,#f97316,#fb923c);
+          color: #fff; display: flex; align-items: center; justify-content: center;
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-size: 0.9rem; font-weight: 800;
+          box-shadow: 0 3px 10px rgba(249,115,22,0.3);
+        }
+        .qt-step-label {
+          margin-top: 0.5rem; font-size: 0.88rem; font-weight: 500;
+          color: #334155; text-align: center; max-width: 220px; line-height: 1.4;
+        }
+        .qt-step-line {
+          width: 2px; height: 32px;
+          background: linear-gradient(#fed7aa,#fde68a); margin: 4px 0;
+        }
+
+        .qt-question {
+          font-family: 'Bricolage Grotesque', sans-serif;
+          font-size: 1.2rem; font-weight: 700;
+          color: #1e293b; line-height: 1.4;
+          margin-bottom: 1.5rem; letter-spacing: -0.01em;
+        }
+
+        .qt-option {
+          width: 100%; text-align: left;
+          padding: 0.9rem 1.1rem; border-radius: 12px;
+          border: 1.5px solid #e2e8f0; background: #fafafa;
+          font-family: 'Instrument Sans', sans-serif;
+          font-size: 0.9rem; color: #334155;
+          cursor: pointer; margin-bottom: 0.6rem;
+          transition: all 0.15s ease;
+          display: flex; align-items: center; gap: 0.75rem;
+        }
+        .qt-option:hover {
+          border-color: #f97316; background: #fff7ed;
+          color: #c2410c; transform: translateX(3px);
+        }
+        .qt-option:last-child { margin-bottom: 0; }
+        .qt-option-letter {
+          width: 24px; height: 24px; border-radius: 50%;
+          background: #f1f5f9; border: 1.5px solid #e2e8f0;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 0.7rem; font-weight: 700; color: #64748b;
+          flex-shrink: 0; transition: all 0.15s ease;
+        }
+        .qt-option:hover .qt-option-letter {
+          background: #f97316; border-color: #f97316; color: #fff;
+        }
+
+        .qt-skip {
+          margin-top: 1.5rem; width: 100%; padding: 0.75rem;
+          border: 1.5px solid #e2e8f0; border-radius: 10px;
+          background: transparent;
+          font-family: 'Instrument Sans', sans-serif;
+          font-size: 0.85rem; color: #94a3b8; cursor: pointer;
+          transition: all 0.15s ease;
+        }
+        .qt-skip:hover { border-color: #f97316; color: #f97316; background: #fff7ed; }
+      `}</style>
+
+      <div className="qt-root">
+        <div className="qt-blob qt-blob-1" />
+        <div className="qt-blob qt-blob-2" />
+
+        {/* Top bar */}
+        <div className="qt-topbar">
+          <div className="qt-brand">
+            <div className="qt-brand-dot" />
+            Quiz
           </div>
-        )}
+          <div className="qt-counter">{pointer + 1} / {items.length}</div>
+        </div>
 
-        <h1 className="text-3xl font-bold text-blue-700 mb-6">
-          Quiz
-        </h1>
+        {/* Progress bar */}
+        <div className="qt-progress-wrap">
+          <div className="qt-progress-fill" style={{ width: `${progress}%` }} />
+        </div>
 
-        <ItemView
-          item={current}
-          onNext={nextItem}
-          onSaveAnswer={saveAnswer}
-        />
+        {/* Card */}
+        <div className="qt-card" key={pointer}>
+          <ItemView
+            item={current}
+            stageType={stageType}
+            timer={timer}
+            isContent={isContent}
+            onNext={nextItem}
+            onSaveAnswer={saveAnswer}
+          />
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-/* ===== ITEM VIEW ===== */
-function ItemView({ item, onNext, onSaveAnswer }) {
+/* ── Item View ── */
+function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
   useEffect(() => {
-    if (item.type === "audio") {
-      speak(item.question_text, () => onNext());
-    }
+    if (item.type === "audio") speak(item.question_text, () => onNext());
     return () => window.speechSynthesis.cancel();
   }, [item]);
 
-  /* ===== NON-MCQ ===== */
-  if (item.type !== "mcq") {
+  const LETTERS = ["A", "B", "C", "D"];
+
+  /* AUDIO */
+  if (item.type === "audio") {
     return (
-      <div className="space-y-4">
-        <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg text-lg text-gray-800 shadow-sm">
-          {item.type === "audio" && (
-            <p className="text-gray-600 italic text-sm text-center">
-              🎧 Listen to the audio carefully
-            </p>
-          )}
-
-          {item.type === "visual" &&
-            (() => {
-              try {
-                const parsed = JSON.parse(item.question_text);
-                return (
-                  <div className="max-w-xl mx-auto">
-                    <div className="flex flex-col items-center gap-6">
-                      {parsed.steps.map((s, i) => (
-                        <div key={i} className="flex flex-col items-center">
-                          <div className="w-16 h-16 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold shadow-md">
-                            {i + 1}
-                          </div>
-                          <div className="mt-2 text-center text-sm font-medium text-gray-800 max-w-xs">
-                            {s}
-                          </div>
-                          {i < parsed.steps.length - 1 && (
-                            <div className="w-1 h-10 bg-blue-300 my-2"></div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              } catch {
-                return <p>Invalid visual content</p>;
-              }
-            })()}
-
-          {item.type !== "audio" && item.type !== "visual" && (
-            <p>{item.question_text}</p>
-          )}
+      <>
+        <span className="qt-badge qt-badge-green">
+          <span className="qt-badge-dot" style={{ background: "#16a34a" }} />
+          Audio
+        </span>
+        <div className="qt-audio-box">
+          <div className="qt-audio-icon">🎧</div>
+          <p style={{ fontSize: "0.9rem", color: "#15803d", fontWeight: 500 }}>
+            Listen carefully…
+          </p>
+          <div style={{ display: "flex", gap: "4px", alignItems: "center", height: 28 }}>
+            {[1,2,3,4,5].map((b) => (
+              <div key={b} className="qt-wave-bar" style={{
+                height: `${8 + b * 4}px`,
+                animationDelay: `${b * 0.12}s`,
+              }}/>
+            ))}
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
-  /* ===== MCQ ===== */
+   /* VISUAL */
+  if (item.type === "visual") {
+    let parsed = null;
+    try { parsed = JSON.parse(item.question_text); } catch {}
+    return (
+      <>
+        <span className="qt-badge qt-badge-blue">
+          <span className="qt-badge-dot" style={{ background: "#2563eb" }} />
+          Visual
+        </span>
+        {isContent && (
+          <div className="qt-timer">
+            <div className="qt-timer-inner">{timer}</div>
+          </div>
+        )}
+        {parsed?.steps ? (
+          <div className="qt-visual-steps">
+            {parsed.steps.map((s, i) => {
+              const colors = ["#6366f1","#0891b2","#059669","#d97706","#8b5cf6","#e11d48"];
+              const bgs    = ["#eef2ff","#ecfeff","#f0fdf4","#fffbeb","#faf5ff","#fff1f2"];
+              const color  = colors[i % colors.length];
+              const bg     = bgs[i % bgs.length];
+              const last   = i === parsed.steps.length - 1;
+              return (
+                <div key={i} className="qt-step-node">
+                  <div className="qt-step-spine">
+                    <div className="qt-step-circle" style={{ background: color, boxShadow: `0 2px 8px ${color}40` }}>
+                      {i + 1}
+                    </div>
+                    {!last && <div className="qt-step-line" style={{ background: `linear-gradient(${color}60, ${colors[(i+1) % colors.length]}40)` }} />}
+                  </div>
+                  <div className="qt-step-card" style={{ background: bg, borderColor: color, color: "#1e293b" }}>
+                    {s}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="qt-content-text">{item.question_text}</p>
+        )}
+      </>
+    );
+  }
+ 
+  /* TEXT content (non-MCQ) */
+  if (item.type !== "mcq") {
+    return (
+      <>
+        <span className="qt-badge qt-badge-orange">
+          <span className="qt-badge-dot" style={{ background: "#ea580c" }} />
+          Read
+        </span>
+        {isContent && (
+          <div className="qt-timer">
+            <div className="qt-timer-inner">{timer}</div>
+          </div>
+        )}
+        <p className="qt-content-text">{item.question_text}</p>
+      </>
+    );
+  }
+
+
+  /* MCQ */
   return (
-    <div>
-      <p className="font-semibold text-lg mb-4">
-        {item.question_text}
-      </p>
-      <div className="space-y-3">
+    <>
+      <span className="qt-badge qt-badge-orange">
+        <span className="qt-badge-dot" style={{ background: "#ea580c" }} />
+        Question
+      </span>
+      <p className="qt-question">{item.question_text}</p>
+      <div>
         {item.options.map((o, idx) => (
           <button
             key={o}
+            className="qt-option"
             onClick={async () => {
               const ok = await onSaveAnswer(idx);
               if (ok) onNext();
             }}
-            className="w-full text-left p-4 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-300 transition"
           >
+            <span className="qt-option-letter">{LETTERS[idx]}</span>
             {o}
           </button>
         ))}
       </div>
-    </div>
+      <button className="qt-skip" onClick={onNext}>Skip →</button>
+    </>
   );
 }

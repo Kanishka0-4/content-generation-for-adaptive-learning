@@ -23,10 +23,11 @@ function toSpeakableText(markdown: string): string {
 }
 
 const SPEEDS = [
+  { label: "0.50×", value: 0.50 },
   { label: "0.75×", value: 0.75 },
   { label: "1×",    value: 1.0  },
-  { label: "1.25×", value: 1.25 },
-  { label: "1.5×",  value: 1.5  },
+  { label: "1.5", value: 1.5 },
+  { label: "2.0",  value: 2.0  },
 ];
 
 export default function AudioRenderer({ block }: AudioRendererProps) {
@@ -34,6 +35,7 @@ export default function AudioRenderer({ block }: AudioRendererProps) {
   const [supported, setSupported] = useState(false);
   const [progress, setProgress]   = useState(0);
   const [speed, setSpeed]         = useState(1.0);
+  const speedRef    = useRef(1.0); // ref so handlePlay closure always reads latest speed
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -52,21 +54,20 @@ export default function AudioRenderer({ block }: AudioRendererProps) {
     if (intervalRef.current) clearInterval(intervalRef.current);
   }, [block]);
 
-  const handlePlay = () => {
-    if (!supported) return;
+  const handleSpeedChange = (val: number) => {
+    setSpeed(val);
+    speedRef.current = val;
 
-    if (playing) {
-      window.speechSynthesis.cancel();
-      setPlaying(false);
-      setProgress(0);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      return;
-    }
+    if (!playing) return;
 
-    const text = toSpeakableText(block);
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate  = speed;
-    utterance.pitch = 1;
+    // cancel current utterance and restart at new speed
+    window.speechSynthesis.cancel();
+    if (intervalRef.current) clearInterval(intervalRef.current);
+
+    const text        = toSpeakableText(block);
+    const utterance   = new SpeechSynthesisUtterance(text);
+    utterance.rate    = val;
+    utterance.pitch   = 1;
 
     const voices = window.speechSynthesis.getVoices();
     const preferred =
@@ -78,7 +79,55 @@ export default function AudioRenderer({ block }: AudioRendererProps) {
       setPlaying(true);
       setProgress(0);
       let elapsed = 0;
-      const estimated = (text.length * 55) / speed;
+      const estimated = (text.length * 55) / val;
+      intervalRef.current = setInterval(() => {
+        elapsed += 200;
+        setProgress(Math.min((elapsed / estimated) * 100, 95));
+      }, 200);
+    };
+    utterance.onend = () => {
+      setPlaying(false);
+      setProgress(100);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setTimeout(() => setProgress(0), 800);
+    };
+    utterance.onerror = () => {
+      setPlaying(false);
+      setProgress(0);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+    console.log("SPEED:", speed, "SPEED REF:", speedRef.current);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handlePlay = () => {
+    if (!supported) return;
+
+    if (playing) {
+      window.speechSynthesis.cancel();
+      setPlaying(false);
+      setProgress(0);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      return;
+    }
+
+    const text        = toSpeakableText(block);
+    const currentSpeed = speedRef.current; // read from ref, always latest
+    const utterance   = new SpeechSynthesisUtterance(text);
+    utterance.rate    = currentSpeed;
+    utterance.pitch   = 1;
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferred =
+      voices.find((v) => v.lang === "en-US" && v.localService) ??
+      voices.find((v) => v.lang.startsWith("en"));
+    if (preferred) utterance.voice = preferred;
+
+    utterance.onstart = () => {
+      setPlaying(true);
+      setProgress(0);
+      let elapsed = 0;
+      const estimated = (text.length * 55) / currentSpeed;
       intervalRef.current = setInterval(() => {
         elapsed += 200;
         setProgress(Math.min((elapsed / estimated) * 100, 95));
@@ -97,17 +146,6 @@ export default function AudioRenderer({ block }: AudioRendererProps) {
     };
 
     window.speechSynthesis.speak(utterance);
-  };
-
-  const handleSpeedChange = (val: number) => {
-    setSpeed(val);
-    /* if playing, restart at new speed */
-    if (playing) {
-      window.speechSynthesis.cancel();
-      setPlaying(false);
-      setProgress(0);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
   };
 
   /* parse block into clean bullet points */
@@ -211,33 +249,6 @@ export default function AudioRenderer({ block }: AudioRendererProps) {
         </div>
       )}
 
-      {/* Content — bullets when playing, full prose when not */}
-      {playing ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {bulletPoints.map((pt, i) => (
-            <div key={i} style={{
-              display: "flex", alignItems: "flex-start", gap: "0.65rem",
-              padding: "0.65rem 0.9rem",
-              background: bgs[i % bgs.length],
-              borderLeft: `3px solid ${colors[i % colors.length]}`,
-              borderRadius: "0 9px 9px 0",
-              fontSize: "0.9rem", fontWeight: 300,
-              color: "#1e293b", lineHeight: 1.65,
-            }}>
-              <div style={{
-                width: 7, height: 7, borderRadius: "50%",
-                background: colors[i % colors.length],
-                flexShrink: 0, marginTop: "0.46rem", opacity: 0.75,
-              }}/>
-              {pt}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="prose max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{block}</ReactMarkdown>
-        </div>
-      )}
 
     </div>
   );

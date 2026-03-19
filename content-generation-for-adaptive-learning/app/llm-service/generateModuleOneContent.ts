@@ -64,7 +64,7 @@ Text emphasis: ${profile.text}%
 
 CONTENT ADAPTATION RULES
 
-Adapt explanation style dynamically according to these percentages.
+Adapt explanation style dynamically according to these percentages. The content should feel cohesive and unified, but the style of explanation should shift according to the profile.Also the complete module must feel enough to be completed in 1 week. Considering the user studies 1-2 hours daily.
 
 VISUAL EMPHASIS
 If visual percentage is high:
@@ -96,28 +96,66 @@ Do NOT mention learning styles anywhere in the content.
 VISUALIZATION RULES
 
 Each chapter MUST contain at least one visual block.
-
-Use the exact syntax:
+Place each visual immediately after the concept it explains.
+Choose the type that best fits the content.
 
 [VISUAL]
-type: flow | hierarchy | comparison | cycle
-...data...
+type: flow
+title: ...
+data:
+- step: ...
+  description: ...
 [/VISUAL]
 
-Visual types:
+[VISUAL]
+type: cycle
+title: ...
+data:
+- step: ...
+  description: ...
+[/VISUAL]
 
-flow → process or step sequence  
-hierarchy → classification or categories  
-comparison → differences between concepts  
-cycle → repeating processes  
+[VISUAL]
+type: hierarchy
+title: ...
+data:
+- concept: ...
+  description: ...
+[/VISUAL]
 
-Place visuals immediately after the concept they explain.
+[VISUAL]
+type: hierarchy
+title: ...
+data:
+- name: ...
+  description: ...
+  children:
+  - name: ...
+    description: ...
+[/VISUAL]
+
+[VISUAL]
+type: comparison
+title: ...
+data:
+- concept: ...
+  features:
+    - ...
+    - ...
+  example: ...
+[/VISUAL]
+
+- flow / cycle      → step, description
+- hierarchy (flat)  → concept, description
+- hierarchy (nested)→ name, description, children
+- comparison        → concept, features, example
 
 --------------------------------------------------
 
 WRITING STYLE RULES
 
 The material must feel like well-written study notes.
+Visual explanations should not repeat in the text but can be extended in the text.
 
 Paragraph rules:
 
@@ -130,7 +168,9 @@ Each chapter MUST include:
 • one analogy
 • one real-world application
 • one example
-• one bullet list
+• one bullet list at the end summarizing key points.the points should be in the form:
+### Key Takeaways
+
 
 --------------------------------------------------
 

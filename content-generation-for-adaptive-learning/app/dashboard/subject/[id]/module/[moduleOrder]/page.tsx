@@ -9,6 +9,12 @@ interface Chapter {
   content: string;
 }
 
+interface LearningProfile {
+  visual: number;
+  audio: number;
+  text: number;
+}
+
 function parseChapters(markdown: string): Chapter[] {
   const lines = markdown.split("\n");
   const chapters: Chapter[] = [];
@@ -18,7 +24,10 @@ function parseChapters(markdown: string): Chapter[] {
   for (const line of lines) {
     if (/^#{2,3}\s+Chapter\s+\d+/i.test(line)) {
       if (currentTitle) {
-        chapters.push({ title: currentTitle, content: currentLines.join("\n").trim() });
+        chapters.push({
+          title: currentTitle,
+          content: currentLines.join("\n").trim(),
+        });
       }
       currentTitle = line.replace(/^#{2,3}\s+/, "").trim();
       currentLines = [];
@@ -28,54 +37,74 @@ function parseChapters(markdown: string): Chapter[] {
   }
 
   if (currentTitle) {
-    chapters.push({ title: currentTitle, content: currentLines.join("\n").trim() });
+    chapters.push({
+      title: currentTitle,
+      content: currentLines.join("\n").trim(),
+    });
   }
 
   return chapters;
 }
 
 export default function ModulePage() {
-  const params = useParams();
-  const subjectId = params.id;
-  const moduleOrder = params.moduleOrder;
 
-  const [chapters, setChapters] = useState<Chapter[]>([]);
-  const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const params = useParams();
+  const subjectId   = params?.id as string;
+  const moduleOrder = params?.moduleOrder as string;
+
+  const [chapters, setChapters]     = useState<Chapter[]>([]);
+  const [profile, setProfile]       = useState<LearningProfile | null>(null);
+  const [moduleId, setModuleId]     = useState<string | null>(null); // 🔥 NEW
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState("");
 
   useEffect(() => {
     async function fetchContent() {
       try {
-        const res = await fetch(`/api/dashboard/subjects/${subjectId}/module/${moduleOrder}`);
-        if (!res.ok) { setError("Module content not found"); setLoading(false); return; }
+        const res = await fetch(
+          `/api/dashboard/subjects/${subjectId}/module/${moduleOrder}`
+        );
+
+        if (!res.ok) {
+          setError("Module content not found");
+          setLoading(false);
+          return;
+        }
+
         const data = await res.json();
+
         setChapters(parseChapters(data.content));
+        setProfile(data.learning_profile ?? null);
+        setModuleId(data.module_id ?? null); // 🔥 NEW
         setLoading(false);
+
       } catch (err) {
         console.error(err);
         setError("Failed to load module");
         setLoading(false);
       }
     }
-    fetchContent();
+
+    if (subjectId && moduleOrder) fetchContent();
   }, [subjectId, moduleOrder]);
 
   if (loading) return <p className="p-6 text-slate-500">Loading module...</p>;
-  if (error) return <p className="p-6 text-red-500">{error}</p>;
+  if (error)   return <p className="p-6 text-red-500">{error}</p>;
 
   return (
     <div className="flex h-screen bg-white overflow-hidden">
 
-      {/* ── Sidebar ── */}
+      {/* Sidebar */}
       <aside className="w-72 flex-shrink-0 border-r border-slate-200 flex flex-col overflow-hidden bg-white">
 
         <div className="px-5 py-5 border-b border-slate-200">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Contents</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+            Contents
+          </p>
           <p className="text-sm text-slate-500">{chapters.length} chapters</p>
         </div>
 
-        {/* Chapter list */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
           {chapters.map((chapter, i) => (
             <button
@@ -99,35 +128,15 @@ export default function ModulePage() {
               </span>
             </button>
           ))}
-
-          {/* Quiz placeholder */}
-          <div className="mt-4 pt-4 border-t border-slate-200">
-            <p className="px-3 mb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quizzes</p>
-            <div className="px-3 py-3 text-sm text-slate-400 italic">Coming soon</div>
-          </div>
         </nav>
 
-        {/* Progress */}
-        <div className="px-5 py-4 border-t border-slate-200">
-          <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-            <span>Progress</span>
-            <span>{chapters.length > 0 ? Math.round(((activeIndex + 1) / chapters.length) * 100) : 0}%</span>
-          </div>
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-amber-400 rounded-full transition-all duration-500"
-              style={{ width: chapters.length > 0 ? `${((activeIndex + 1) / chapters.length) * 100}%` : "0%" }}
-            />
-          </div>
-        </div>
       </aside>
 
-      {/* ── Content ── */}
+      {/* Content */}
       <main className="flex-1 overflow-y-auto bg-[#FAFAF8]">
         {chapters[activeIndex] && (
           <div className="max-w-3xl mx-auto px-10 py-12">
 
-            {/* Chapter header */}
             <div className="mb-8 pb-6 border-b border-slate-200">
               <span className="inline-block text-xs font-semibold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200 mb-3">
                 Chapter {activeIndex + 1}
@@ -140,18 +149,19 @@ export default function ModulePage() {
               </h1>
             </div>
 
-            <MarkdownRenderer content={chapters[activeIndex].content} />
+            <MarkdownRenderer
+              content={chapters[activeIndex].content}
+              profile={profile ?? { visual: 33, audio: 33, text: 34 }}
+              moduleId={moduleId ?? ""} // 🔥 PASS moduleId
+            />
 
-            {/* Prev / Next */}
+            {/* Navigation */}
             <div className="mt-14 pt-8 border-t border-slate-200 flex justify-between">
               {activeIndex > 0 ? (
                 <button
                   onClick={() => setActiveIndex(activeIndex - 1)}
-                  className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-800 transition-colors"
+                  className="text-sm text-slate-500 hover:text-slate-800"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
                   Previous
                 </button>
               ) : <div />}
@@ -159,18 +169,17 @@ export default function ModulePage() {
               {activeIndex < chapters.length - 1 && (
                 <button
                   onClick={() => setActiveIndex(activeIndex + 1)}
-                  className="flex items-center gap-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-lg transition-colors"
+                  className="text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-lg"
                 >
                   Next Chapter
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
                 </button>
               )}
             </div>
+
           </div>
         )}
       </main>
+
     </div>
   );
 }
