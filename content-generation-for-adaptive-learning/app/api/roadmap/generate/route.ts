@@ -23,9 +23,39 @@ function extractSubjectTitle(query: string) {
     .join(" ");
 }
 
-function extractDuration(query: string) {
-  const match = query.match(/\d+\s*(weeks?|months?|days?)/i);
-  return match ? match[0] : null;
+/* ---------------- DURATION PARSING ---------------- */
+
+function parseDuration(query: string) {
+  const match = query.match(/(\d+)\s*(weeks?|months?|days?)/i);
+
+  if (!match) {
+    return {
+      raw: null,
+      unit: null,
+      value: null,
+      moduleCount: 8, // default fallback
+    };
+  }
+
+  const value = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+
+  let moduleCount = 8;
+
+  if (unit.includes("week")) {
+    moduleCount = value;
+  } else if (unit.includes("month")) {
+    moduleCount = value * 4;
+  } else if (unit.includes("day")) {
+    moduleCount = Math.max(1, Math.floor(value / 3));
+  }
+
+  return {
+    raw: match[0],
+    unit,
+    value,
+    moduleCount,
+  };
 }
 
 /* ---------------- GENERATE ROADMAP ---------------- */
@@ -69,7 +99,7 @@ export async function POST(req: Request) {
     }
 
     const subjectTitle = extractSubjectTitle(message);
-    const duration = extractDuration(message);
+    const durationInfo = parseDuration(message);
 
     /* ---------- EXAM DETECTION ---------- */
 
@@ -118,57 +148,52 @@ If the user provides their own syllabus, topics, or list:
 • Do NOT introduce unrelated topics  
 • You may group or reorder for better learning flow  
 
-If both exam and custom syllabus are present:
-• Align with exam structure
-• BUT prioritize user-provided topics
-
 --------------------------------------------------
 
 3. USER CONSTRAINTS (STRICT)
 
-If the user specifies:
+If the user specifies removing topics:
 
-• removing a subject/topic  
-• excluding a module  
-• skipping a section  
-
-Then:
-
-• STRICTLY exclude those topics  
-• Do NOT include them anywhere in the roadmap  
-• Adjust remaining modules accordingly  
+• STRICTLY exclude them  
+• Do NOT include anywhere  
 
 --------------------------------------------------
 
 4. DURATION ADAPTATION
 
-Adapt the roadmap to the given time duration:
+Total modules required: ${durationInfo.moduleCount}
 
-• Short duration → prioritize high-weight / important topics  
-• Long duration → cover full syllabus  
+CONTENT GRANULARITY RULE:
 
-Rules:
+If duration is SHORT (≤ 4 weeks):
+• Combine topics
+• Focus only on important concepts
+• Fewer subtopics
 
-• Distribute topics evenly across modules  
-• Avoid overloading any module  
-• Maintain balanced difficulty  
-• Ensure realistic weekly workload  
+If duration is MEDIUM (1–3 months):
+• Balanced coverage
+• Moderate depth
+• Structured subtopics
+
+If duration is LONG (≥ 3 months):
+• Deep coverage
+• Break into fine-grained subtopics
+• Detailed conceptual flow
+
+SUBTOPIC DENSITY RULE:
+
+• Short duration → fewer subtopics  
+• Long duration → more detailed subtopics  
 
 --------------------------------------------------
 
 5. MODULE STRUCTURE
 
-Modules represent major topic areas.
-
 Each module MUST contain:
 
-• focus_topics → main chapters or units  
-• subtopics → specific concepts inside those topics  
-• expected_outcome → clear learning outcome  
-
-Ensure:
-• All major areas are covered  
-• Logical progression between modules  
+• focus_topics  
+• subtopics  
+• expected_outcome  
 
 --------------------------------------------------
 
@@ -176,30 +201,16 @@ Ensure:
 
 If Exam is "None":
 
-• The LAST module must include ONLY:
-  - revision
-  - practice  
+• Last module = revision + practice ONLY  
+• NO PYQs  
 
-• Do NOT include previous year questions (PYQs)
+If Exam exists:
 
-If Exam is present:
-
-• The LAST module MUST include:
-  - revision
-  - practice
-  - previous year questions (PYQs)
+• Last module = revision + practice + PYQs  
 
 --------------------------------------------------
 
-STRUCTURE RULES:
-
-• Each module must contain focus_topics and subtopics  
-• Modules must be clearly separated  
-• Maintain consistency across all modules  
-
---------------------------------------------------
-
-OUTPUT FORMAT (RETURN ONLY VALID JSON):
+OUTPUT FORMAT (STRICT JSON):
 
 [
 {
@@ -209,6 +220,13 @@ OUTPUT FORMAT (RETURN ONLY VALID JSON):
 "expected_outcome": ""
 }
 ]
+
+--------------------------------------------------
+
+STRICT:
+
+• Generate EXACTLY ${durationInfo.moduleCount} modules  
+• Do NOT generate more or fewer  
 
 --------------------------------------------------
 
@@ -236,7 +254,8 @@ ${message}
 
     return NextResponse.json({
       subjectTitle,
-      duration,
+      duration: durationInfo.raw,
+      moduleCount: durationInfo.moduleCount,
       roadmap,
     });
 

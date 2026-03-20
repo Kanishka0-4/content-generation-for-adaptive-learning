@@ -125,6 +125,9 @@ If TEXT is highest:
 If TEXT is second:
 • Provide summarized explanation in bullet points (8–12 points)  
 • Not more than 2 sentences per bullet  
+• The text points must explain the concept, but they can be more concise and less detailed than if TEXT were highest.
+• Should not contain the content of visual as it is
+• Text should support visuals (not repeat them)
 
 If TEXT is lowest:
 • Only provide short summary (5–8 bullets)  
@@ -138,24 +141,32 @@ If VISUAL is highest:
 • Visual blocks must carry main explanation  
 • Use flows, hierarchies, comparisons heavily  
 • Text should support visuals (not repeat them)  
+• atleast 2 visuals per chapter, each explaining a different concept
 
 If VISUAL is second:
 • Use moderate visuals to explain relationships  
+• visual should support test (not repeat them)
+• Use flows, hierarchies, comparisons in moderation, not as main explanation
 
 If VISUAL is lowest:
-• Use minimal or optional visuals  
-
+• Use minimal or optional visuals 
+• Visuals can be decorative or supplementary, not essential for understanding the concept
 --------------------------------------------------
 
 AUDIO PRIORITY RULES
 
 If AUDIO is highest:
 • Use conversational, natural explanation  
-• Include storytelling and intuitive reasoning  
+• Include storytelling and intuitive reasoning 
+• Proper clear explanation of concepts in audio. The audio length should be sufficient to explain the concept clearly and intuitively. Avoid being too brief or too verbose. Aim for a length that allows for a thorough explanation without overwhelming the learner. 
+• If the user is not reading the text, the audio should be able to stand alone and provide a complete understanding of the concept of the complete chapter
+• The audio is NOT just a summary or a simplified version of the text. It should provide a full explanation of the concept, with examples, analogies, and intuitive reasoning to help the learner grasp the material deeply.
 
 If AUDIO is second:
-• Keep explanations clear and concise  
-
+• Keep explanations clear and concise 
+• Use audio to clarify complex concepts or provide additional insights.
+• It is should summarize the main points of the chapter, but also provide additional insights, examples, or intuitive explanations from the text. 
+• This audio should work as a gist to the text and visual content, the length should be not more than 2/3 of the time it would take to read the text content. It should not be too brief.
 If AUDIO is lowest:
 • Keep AUDIO block minimal or optional  
 
@@ -269,7 +280,7 @@ Each chapter MUST include:
 
 Format:
 ### Key Takeaways
-
+• The bullet points must be brief, important points from the chapter. It should not exceed 5 points. It should not be a summary of the chapter, but rather the most critical insights or concepts that the learner should remember.
 --------------------------------------------------
 
 IMPORTANT
