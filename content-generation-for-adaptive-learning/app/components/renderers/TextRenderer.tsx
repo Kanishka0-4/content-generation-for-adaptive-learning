@@ -7,7 +7,6 @@ interface TextRendererProps {
 }
 
 export default function TextRenderer({ block }: TextRendererProps) {
-
   return (
     <div className="prose max-w-none">
       <ReactMarkdown>{block}</ReactMarkdown>

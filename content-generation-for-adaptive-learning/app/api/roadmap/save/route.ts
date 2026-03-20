@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Pool } from "pg";
 import { cookies } from "next/headers";
 import { decodeAuthToken } from "@/lib/auth";
-import { generateModuleOneContent } from "../../../llm-service/generateModuleOneContent";
+import { generateModuleContent } from "../../ai/generateModuleContent";
 
 /* ---------------- DATABASE ---------------- */
 
@@ -14,11 +14,9 @@ const pool = new Pool({
 /* ---------------- ROUTE ---------------- */
 
 export async function POST(req: Request) {
-
   const client = await pool.connect();
 
   try {
-
     const { roadmap, subjectTitle, duration, exam } = await req.json();
 
     if (!Array.isArray(roadmap) || roadmap.length === 0) {
@@ -30,8 +28,8 @@ export async function POST(req: Request) {
 
     /* ---------- AUTH ---------- */
 
-    const cookieStore = cookies();
-    const token = (await cookieStore).get("auth_token")?.value;
+    const cookieStore =  await cookies();
+    const token = cookieStore.get("auth_token")?.value;
 
     if (!token) {
       return NextResponse.json(
@@ -73,7 +71,6 @@ export async function POST(req: Request) {
     /* ---------- INSERT MODULES ---------- */
 
     for (let i = 0; i < roadmap.length; i++) {
-
       const mod = roadmap[i];
 
       await client.query(
@@ -94,7 +91,6 @@ export async function POST(req: Request) {
       /* ---------- INSERT SUBTOPICS ---------- */
 
       for (let j = 0; j < mod.subtopics.length; j++) {
-
         await client.query(
           `
           INSERT INTO module_subtopics
@@ -108,9 +104,7 @@ export async function POST(req: Request) {
             mod.subtopics[j]
           ]
         );
-
       }
-
     }
 
     /* ---------- COMMIT ---------- */
@@ -122,30 +116,31 @@ export async function POST(req: Request) {
     /* ---------- GENERATE MODULE 1 CONTENT ---------- */
 
     try {
-
-      generateModuleOneContent({
+      await generateModuleContent({
         subjectId,
         subjectTitle,
-        module: roadmap[0]
+        module: {
+          title: roadmap[0].week,
+          topics: roadmap[0].focus_topics,
+          expected_outcome: roadmap[0].expected_outcome,
+        },
+        moduleOrder: 1, // ✅ VERY IMPORTANT
       });
 
-      console.log("🤖 Generating Module 1 content…");
+      console.log("🤖 Module 1 generated");
 
     } catch (err) {
-
-      console.warn("⚠️ Module content generation failed", err);
-
+      console.warn("⚠️ Module 1 generation failed", err);
     }
 
     /* ---------- RESPONSE ---------- */
 
     return NextResponse.json({
       success: true,
-      subjectId
+      subjectId,
     });
 
   } catch (error) {
-
     await client.query("ROLLBACK");
 
     console.error("❌ SAVE ROADMAP FAILED:", error);
@@ -156,8 +151,6 @@ export async function POST(req: Request) {
     );
 
   } finally {
-
     client.release();
-
   }
 }

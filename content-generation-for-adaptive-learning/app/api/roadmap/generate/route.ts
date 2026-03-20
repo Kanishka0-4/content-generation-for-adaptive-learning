@@ -5,7 +5,7 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,
 });
 
-/* SUBJECT EXTRACTION */
+/* ---------------- SUBJECT EXTRACTION ---------------- */
 
 function extractSubjectTitle(query: string) {
   const cleaned = query
@@ -28,28 +28,37 @@ function extractDuration(query: string) {
   return match ? match[0] : null;
 }
 
-async function generateRoadmap(prompt: string) {
+/* ---------------- GENERATE ROADMAP ---------------- */
 
+async function generateRoadmap(prompt: string) {
   const completion = await groq.chat.completions.create({
     model: "llama-3.3-70b-versatile",
     messages: [
-      { role: "system", content: "You are an academic planner. Output STRICT JSON only." },
-      { role: "user", content: prompt }
+      {
+        role: "system",
+        content: "You are an academic planner. Output STRICT JSON only.",
+      },
+      { role: "user", content: prompt },
     ],
-    temperature: 0.4
+    temperature: 0.4,
   });
 
   let text = completion.choices?.[0]?.message?.content ?? "";
 
   text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("❌ Invalid JSON from model:", text);
+    throw new Error("Model returned invalid JSON");
+  }
 }
 
+/* ---------------- ROUTE ---------------- */
+
 export async function POST(req: Request) {
-
   try {
-
     const { message } = await req.json();
 
     if (!message) {
@@ -62,39 +71,133 @@ export async function POST(req: Request) {
     const subjectTitle = extractSubjectTitle(message);
     const duration = extractDuration(message);
 
+    /* ---------- EXAM DETECTION ---------- */
+
+    const examKeywords = ["GATE", "JEE", "UPSC", "NEET", "NET", "JAM"];
+
+    const detectedExam = examKeywords.find((e) =>
+      message.toUpperCase().includes(e)
+    );
+
+    /* ---------- PROMPT ---------- */
+
     const prompt = `
 Create a structured study roadmap.
 
+--------------------------------------------------
+
 IMPORTANT RULES:
 
-1. If a known exam is mentioned (for example GATE, JEE, UPSC, NET, etc.), organize the roadmap according to the major sections of that exam syllabus.
+1. EXAM HANDLING
 
-   Example:
-   - GATE Chemistry → Physical Chemistry, Organic Chemistry, Inorganic Chemistry, Spectroscopy, Mathematics, Practice/Revision.
-   - GATE Computer Science → Algorithms, Data Structures, Operating Systems, DBMS, Computer Networks, Practice.
+Exam: ${detectedExam || "None"}
 
-2. If no exam is mentioned, organize modules according to standard undergraduate subject structure used in universities.
-When preparing for an exam, ensure that all major syllabus areas of that exam are represented across the modules.
-Do not omit major sections of the syllabus.
+If Exam is NOT "None":
 
-3. Adapt the roadmap to the given time duration:
-   - If the duration is short → prioritize the most important or high-weight topics.
-   - If the duration is long → cover the full syllabus.
-   - If preparing for an exam → include practice, revision, and previous year questions.
+• Organize modules according to the major sections of that exam syllabus  
+• Ensure ALL major areas are represented  
+• Do NOT omit important sections  
+• Include:
+  - practice
+  - revision
+  - previous year questions (PYQs)
 
-4. Modules represent major topic areas.
+If Exam is "None":
 
-Ensure that all major syllabus areas of the exam are included. 
-For example, GATE Computer Science must include:
-Discrete Mathematics, Data Structures, Algorithms, Computer Organization, Operating Systems, Databases, Computer Networks, Theory of Computation, and Compiler Design.
+• Organize modules using standard university-level subject structure  
+• Do NOT include PYQs anywhere  
 
-5. Each module must contain:
-   - focus_topics → main chapters or units
-   - subtopics → specific concepts inside those topics
-   - expected_outcome → what the learner should understand after completing the module.
+--------------------------------------------------
+
+2. USER PROVIDED SYLLABUS (HIGHEST PRIORITY)
+
+If the user provides their own syllabus, topics, or list:
+
+• STRICTLY base the roadmap on the provided content  
+• Do NOT replace it with standard structure  
+• Do NOT introduce unrelated topics  
+• You may group or reorder for better learning flow  
+
+If both exam and custom syllabus are present:
+• Align with exam structure
+• BUT prioritize user-provided topics
+
+--------------------------------------------------
+
+3. USER CONSTRAINTS (STRICT)
+
+If the user specifies:
+
+• removing a subject/topic  
+• excluding a module  
+• skipping a section  
+
+Then:
+
+• STRICTLY exclude those topics  
+• Do NOT include them anywhere in the roadmap  
+• Adjust remaining modules accordingly  
+
+--------------------------------------------------
+
+4. DURATION ADAPTATION
+
+Adapt the roadmap to the given time duration:
+
+• Short duration → prioritize high-weight / important topics  
+• Long duration → cover full syllabus  
+
+Rules:
+
+• Distribute topics evenly across modules  
+• Avoid overloading any module  
+• Maintain balanced difficulty  
+• Ensure realistic weekly workload  
+
+--------------------------------------------------
+
+5. MODULE STRUCTURE
+
+Modules represent major topic areas.
+
+Each module MUST contain:
+
+• focus_topics → main chapters or units  
+• subtopics → specific concepts inside those topics  
+• expected_outcome → clear learning outcome  
+
+Ensure:
+• All major areas are covered  
+• Logical progression between modules  
+
+--------------------------------------------------
+
+6. FINAL MODULE RULES
+
+If Exam is "None":
+
+• The LAST module must include ONLY:
+  - revision
+  - practice  
+
+• Do NOT include previous year questions (PYQs)
+
+If Exam is present:
+
+• The LAST module MUST include:
+  - revision
+  - practice
+  - previous year questions (PYQs)
+
+--------------------------------------------------
 
 STRUCTURE RULES:
-- Each module must contain focus_topics and subtopics
+
+• Each module must contain focus_topics and subtopics  
+• Modules must be clearly separated  
+• Maintain consistency across all modules  
+
+--------------------------------------------------
 
 OUTPUT FORMAT (RETURN ONLY VALID JSON):
 
@@ -107,12 +210,16 @@ OUTPUT FORMAT (RETURN ONLY VALID JSON):
 }
 ]
 
+--------------------------------------------------
+
 SUBJECT:
 ${subjectTitle}
 
 USER REQUEST:
 ${message}
 `;
+
+    /* ---------- GENERATE ---------- */
 
     const raw = await generateRoadmap(prompt);
 
@@ -130,12 +237,11 @@ ${message}
     return NextResponse.json({
       subjectTitle,
       duration,
-      roadmap
+      roadmap,
     });
 
   } catch (error) {
-
-    console.error("Roadmap generation error:", error);
+    console.error("❌ Roadmap generation error:", error);
 
     return NextResponse.json(
       { error: "Failed to generate roadmap" },
