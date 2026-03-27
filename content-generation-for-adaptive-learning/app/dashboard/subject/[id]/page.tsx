@@ -19,6 +19,16 @@ type Subject = {
   total_duration: string | null;
 };
 
+/* ---------------- ACCENT HELPER ---------------- */
+function getAccent(index: number, total: number): string {
+  const palette = [
+    "#ff7b00","#ff8800","#ff9500","#ffa200",
+    "#ffaa00","#ffb700","#ffc300","#ffd000","#ffdd00","#ffea00",
+  ];
+  const idx = total <= 1 ? 0 : Math.round((index / (total - 1)) * (palette.length - 1));
+  return palette[Math.min(idx, palette.length - 1)];
+}
+
 /* ---------------- PAGE ---------------- */
 
 export default function SubjectLandingPage() {
@@ -36,27 +46,17 @@ export default function SubjectLandingPage() {
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [hoveredModule, setHoveredModule] = useState<number | null>(null);
 
-  /* ---------------- FETCH DATA ---------------- */
+  /* ---------------- FETCH ---------------- */
 
   useEffect(() => {
-    if (!id) {
-      setError("Invalid subject id");
-      setLoading(false);
-      return;
-    }
+    if (!id) { setError("Invalid subject id"); setLoading(false); return; }
 
     async function fetchSubject() {
       try {
         const res = await fetch(`/api/dashboard/subjects/${id}`);
-
-        if (!res.ok) {
-          const text = await res.text();
-          console.error("❌ API ERROR", res.status, text);
-          setError(`API error ${res.status}`);
-          return;
-        }
-
+        if (!res.ok) { setError(`API error ${res.status}`); return; }
         const data = await res.json();
         setSubject(data.subject);
         setModules(data.modules || []);
@@ -74,118 +74,495 @@ export default function SubjectLandingPage() {
   /* ---------------- STATES ---------------- */
 
   if (loading) {
-    return <p className="p-6">Loading subject...</p>;
+    return (
+      <div style={styles.loadingWrapper}>
+        <style>{loadingAnimation}</style>
+        <div style={styles.loadingDot} />
+        <div style={{ ...styles.loadingDot, animationDelay: "0.2s" }} />
+        <div style={{ ...styles.loadingDot, animationDelay: "0.4s" }} />
+      </div>
+    );
   }
 
-  if (error) {
-    return <p className="p-6 text-red-600">{error}</p>;
-  }
-
-  if (!subject) {
-    return <p className="p-6 text-red-600">Subject not found</p>;
+  if (error || !subject) {
+    return (
+      <div style={styles.loadingWrapper}>
+        <p style={{ color: "#ff7b00", fontFamily: "'DM Sans', sans-serif" }}>
+          {error || "Subject not found"}
+        </p>
+      </div>
+    );
   }
 
   /* ---------------- UI ---------------- */
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-8">
-      {/* SUBJECT HEADER */}
-      <div>
-        <h1 className="text-3xl font-bold">{subject.title}</h1>
-        <p className="text-gray-600 mt-1">
-          {subject.exam && `Exam: ${subject.exam} • `}
-          {subject.total_duration}
-        </p>
-      </div>
+    <div style={styles.page}>
+      <style>{globalStyles}</style>
 
-      {/* ACTION BAR */}
-      <div className="flex flex-wrap gap-4">
+      {/* Background orbs */}
+      <div style={styles.orb1} />
+      <div style={styles.orb2} />
+
+      <div style={styles.container}>
+
+        {/* BACK */}
         <button
-          className="px-4 py-2 border rounded hover:bg-gray-100"
-          onClick={() =>
-            router.push(`/dashboard/subject/${id}/roadmap`)
-          }
+          style={styles.backBtn}
+          onClick={() => router.push("/dashboard")}
+          onMouseEnter={e => (e.currentTarget.style.color = "#ff9500")}
+          onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
         >
-          🗺 Roadmap
+          ← Back to Dashboard
         </button>
 
-        <button
-          className="px-4 py-2 border rounded hover:bg-gray-100"
-          onClick={() =>
-            router.push(`/dashboard/subject/${id}/chat`)
-          }
-        >
-          💬 Chat / History
-        </button>
-
-        <button
-          className="px-4 py-2 border rounded cursor-not-allowed opacity-60"
-          disabled
-        >
-          📊 Progress (coming soon)
-        </button>
-      </div>
-
-      {/* MODULES GRID */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-        {modules.map((mod) => (
-          <div
-            key={mod.module_order}
-            className="relative group cursor-pointer"
-            onClick={() =>
-              router.push(
-                `/dashboard/subject/${id}/module/${mod.module_order}`
-              )
-            }
-          >
-            {/* BASE CARD */}
-            <div
-              className="
-                bg-white border border-gray-200 rounded-xl
-                shadow-sm
-                h-36
-                flex flex-col items-center justify-center
-                p-4
-                transition-opacity duration-200
-                group-hover:opacity-0
-              "
-            >
-              <div className="w-10 h-10 rounded-full bg-gray-900 text-white flex items-center justify-center font-semibold mb-3">
-                {mod.module_order}
-              </div>
-
-              <h3 className="text-sm font-semibold text-center text-gray-900">
-                {mod.title}
-              </h3>
-            </div>
-
-            {/* HOVER OVERLAY (does not affect grid) */}
-            <div
-              className="
-                absolute inset-0 z-10
-                bg-white border border-gray-200 rounded-xl
-                shadow-lg
-                p-4
-                opacity-0
-                pointer-events-auto
-                group-hover:opacity-100
-                transition-opacity duration-200
-                flex flex-col
-              "
-            >
-              <h4 className="text-sm font-semibold text-gray-800 mb-2">
-                Topics covered
-              </h4>
-
-              <ul className="text-xs text-gray-600 space-y-1 overflow-y-auto">
-                {mod.topics.map((t, i) => (
-                  <li key={i}>• {t}</li>
-                ))}
-              </ul>
+        {/* HEADER */}
+        <header style={styles.header}>
+          <div style={styles.headerLeft}>
+            <div style={styles.eyebrow}>SUBJECT</div>
+            <h1 style={styles.heading}>{subject.title}</h1>
+            <div style={styles.metaRow}>
+              {subject.exam && (
+                <span style={styles.metaChip}>
+                  <span style={{ color: "#ff9500" }}>●</span>&nbsp;{subject.exam}
+                </span>
+              )}
+              {subject.total_duration && (
+                <span style={styles.metaChip}>
+                  <span style={{ color: "#ffb700" }}>◷</span>&nbsp;{subject.total_duration}
+                </span>
+              )}
             </div>
           </div>
-        ))}
+        </header>
+
+        {/* DIVIDER */}
+        <div style={styles.divider} />
+
+        {/* ACTION BAR */}
+        <div style={styles.actionBar}>
+          <ActionButton
+            icon="🗺"
+            label="Roadmap"
+            onClick={() => router.push(`/dashboard/subject/${id}/roadmap`)}
+          />
+          <ActionButton
+            icon="💬"
+            label="Chat / History"
+            onClick={() => router.push(`/dashboard/subject/${id}/chat`)}
+          />
+          <ActionButton
+            icon="📊"
+            label="Progress"
+            disabled
+            note="coming soon"
+          />
+        </div>
+
+        {/* MODULES */}
+        <section style={styles.modulesSection}>
+          <h2 style={styles.sectionTitle}>
+            Modules
+            <span style={styles.moduleCount}>{modules.length}</span>
+          </h2>
+
+          <div style={styles.grid}>
+            {modules.map((mod, i) => {
+              const accent = getAccent(i, modules.length);
+              const isHovered = hoveredModule === mod.module_order;
+
+              return (
+                <div
+                  key={mod.module_order}
+                  style={{ position: "relative" }}
+                  className="module-card-wrapper"
+                  onMouseEnter={() => setHoveredModule(mod.module_order)}
+                  onMouseLeave={() => setHoveredModule(null)}
+                  onClick={() =>
+                    router.push(`/dashboard/subject/${id}/module/${mod.module_order}`)
+                  }
+                >
+                  {/* BASE CARD */}
+                  <div
+                    style={{
+                      ...styles.card,
+                      opacity: isHovered ? 0 : 1,
+                      borderColor: isHovered ? `${accent}55` : "rgba(255,255,255,0.07)",
+                    }}
+                  >
+                    <div style={styles.cardTopLine} />
+
+                    <div style={{ ...styles.moduleNumber, color: accent, borderColor: `${accent}33`, background: `${accent}11` }}>
+                      {mod.module_order}
+                    </div>
+
+                    <h3 style={styles.cardTitle}>{mod.title}</h3>
+
+                    <p style={styles.cardGoal}>{mod.goal}</p>
+                  </div>
+
+                  {/* HOVER OVERLAY */}
+                  <div
+                    style={{
+                      ...styles.cardOverlay,
+                      opacity: isHovered ? 1 : 0,
+                      borderColor: `${accent}55`,
+                      boxShadow: isHovered ? `0 0 32px ${accent}20` : "none",
+                      pointerEvents: isHovered ? "auto" : "none",
+                    }}
+                  >
+                    <div style={{ ...styles.overlayHeader, color: accent }}>
+                      Topics covered
+                    </div>
+                    <ul style={styles.topicList}>
+                      {mod.topics.map((t, ti) => (
+                        <li key={ti} style={styles.topicItem}>
+                          <span style={{ color: accent, marginRight: "6px" }}>›</span>
+                          {t}
+                        </li>
+                      ))}
+                    </ul>
+                    <div style={{ ...styles.openHint, color: accent }}>
+                      Click to open →
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
       </div>
     </div>
   );
 }
+
+/* ---------------- ACTION BUTTON ---------------- */
+
+function ActionButton({
+  icon, label, onClick, disabled, note,
+}: {
+  icon: string;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  note?: string;
+}) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        ...styles.actionBtn,
+        ...(disabled ? styles.actionBtnDisabled : {}),
+        ...(hovered && !disabled ? styles.actionBtnHover : {}),
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span style={styles.actionIcon}>{icon}</span>
+      <span>{label}</span>
+      {note && <span style={styles.actionNote}>{note}</span>}
+    </button>
+  );
+}
+
+/* ---------------- STYLES ---------------- */
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    background: "#0a0a0a",
+    color: "#fff",
+    fontFamily: "'DM Sans', 'Helvetica Neue', sans-serif",
+    position: "relative",
+    overflow: "hidden",
+  },
+  orb1: {
+    position: "fixed",
+    top: "-180px",
+    right: "-100px",
+    width: "520px",
+    height: "520px",
+    borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(255,136,0,0.12) 0%, transparent 70%)",
+    pointerEvents: "none",
+    zIndex: 0,
+  },
+  orb2: {
+    position: "fixed",
+    bottom: "-200px",
+    left: "-140px",
+    width: "580px",
+    height: "580px",
+    borderRadius: "50%",
+    background: "radial-gradient(circle, rgba(255,208,0,0.07) 0%, transparent 70%)",
+    pointerEvents: "none",
+    zIndex: 0,
+  },
+  container: {
+    maxWidth: "1100px",
+    margin: "0 auto",
+    padding: "40px 24px 80px",
+    position: "relative",
+    zIndex: 1,
+  },
+  backBtn: {
+    background: "none",
+    border: "none",
+    color: "rgba(255,255,255,0.3)",
+    fontSize: "13px",
+    cursor: "pointer",
+    padding: "0 0 28px",
+    fontFamily: "'DM Sans', sans-serif",
+    letterSpacing: "0.02em",
+    transition: "color 0.2s",
+    display: "block",
+  },
+  header: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: "24px",
+    flexWrap: "wrap",
+  },
+  headerLeft: {},
+  eyebrow: {
+    fontSize: "11px",
+    fontWeight: 600,
+    letterSpacing: "0.18em",
+    color: "#ff9500",
+    marginBottom: "10px",
+    textTransform: "uppercase",
+  },
+  heading: {
+    fontSize: "clamp(26px, 4vw, 40px)",
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
+    lineHeight: 1.15,
+    margin: "0 0 14px",
+    background: "linear-gradient(135deg, #ffffff 30%, #ffb700 100%)",
+    WebkitBackgroundClip: "text",
+    WebkitTextFillColor: "transparent",
+  },
+  metaRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  metaChip: {
+    fontSize: "13px",
+    color: "rgba(255,255,255,0.4)",
+    background: "rgba(255,255,255,0.05)",
+    padding: "5px 12px",
+    borderRadius: "20px",
+    display: "flex",
+    alignItems: "center",
+    gap: "5px",
+  },
+  divider: {
+    height: "1px",
+    background: "linear-gradient(90deg, transparent, rgba(255,183,0,0.22), transparent)",
+    margin: "36px 0",
+  },
+  actionBar: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "10px",
+    marginBottom: "48px",
+  },
+  actionBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    background: "rgba(255,255,255,0.04)",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "rgba(255,255,255,0.75)",
+    padding: "11px 20px",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: 500,
+    cursor: "pointer",
+    transition: "all 0.2s",
+    fontFamily: "'DM Sans', sans-serif",
+  },
+  actionBtnHover: {
+    background: "rgba(255,149,0,0.1)",
+    borderColor: "rgba(255,149,0,0.4)",
+    color: "#ff9500",
+  },
+  actionBtnDisabled: {
+    opacity: 0.35,
+    cursor: "not-allowed",
+  },
+  actionIcon: {
+    fontSize: "16px",
+  },
+  actionNote: {
+    fontSize: "11px",
+    color: "rgba(255,255,255,0.25)",
+    background: "rgba(255,255,255,0.06)",
+    padding: "2px 7px",
+    borderRadius: "6px",
+    marginLeft: "2px",
+  },
+  modulesSection: {},
+  sectionTitle: {
+    fontSize: "11px",
+    fontWeight: 600,
+    letterSpacing: "0.14em",
+    color: "rgba(255,255,255,0.28)",
+    textTransform: "uppercase",
+    marginBottom: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+  moduleCount: {
+    fontSize: "11px",
+    background: "rgba(255,149,0,0.15)",
+    color: "#ff9500",
+    padding: "2px 8px",
+    borderRadius: "99px",
+    fontWeight: 600,
+    letterSpacing: "0.04em",
+  },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+    gap: "14px",
+  },
+  card: {
+    background: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    borderRadius: "16px",
+    padding: "22px 20px",
+    cursor: "pointer",
+    transition: "opacity 0.2s ease, border-color 0.2s ease",
+    minHeight: "160px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    position: "relative",
+    overflow: "hidden",
+  },
+  cardTopLine: {
+    position: "absolute",
+    top: 0,
+    left: "15%",
+    width: "70%",
+    height: "2px",
+    borderRadius: "0 0 4px 4px",
+    background: "rgba(255,255,255,0.06)",
+  },
+  moduleNumber: {
+    width: "32px",
+    height: "32px",
+    borderRadius: "8px",
+    border: "1px solid",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "13px",
+    fontWeight: 700,
+    flexShrink: 0,
+  },
+  cardTitle: {
+    fontSize: "14px",
+    fontWeight: 600,
+    color: "#fff",
+    margin: 0,
+    lineHeight: 1.35,
+    letterSpacing: "-0.01em",
+  },
+  cardGoal: {
+    fontSize: "12px",
+    color: "rgba(255,255,255,0.3)",
+    margin: 0,
+    lineHeight: 1.55,
+    display: "-webkit-box",
+    WebkitLineClamp: 3,
+    WebkitBoxOrient: "vertical",
+    overflow: "hidden",
+  },
+  cardOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "#111",
+    border: "1px solid",
+    borderRadius: "16px",
+    padding: "20px",
+    transition: "opacity 0.2s ease, box-shadow 0.2s ease",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    cursor: "pointer",
+    overflow: "hidden",
+  },
+  overlayHeader: {
+    fontSize: "11px",
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    marginBottom: "2px",
+  },
+  topicList: {
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
+    flex: 1,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+  topicItem: {
+    fontSize: "12px",
+    color: "rgba(255,255,255,0.55)",
+    lineHeight: 1.45,
+    display: "flex",
+    alignItems: "flex-start",
+  },
+  openHint: {
+    fontSize: "12px",
+    fontWeight: 600,
+    marginTop: "auto",
+    paddingTop: "8px",
+    borderTop: "1px solid rgba(255,255,255,0.06)",
+  },
+  loadingWrapper: {
+    minHeight: "100vh",
+    background: "#0a0a0a",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "10px",
+  },
+  loadingDot: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "50%",
+    background: "#ff9500",
+    animation: "dotPulse 1.2s ease-in-out infinite",
+  },
+};
+
+const loadingAnimation = `
+@keyframes dotPulse {
+  0%, 80%, 100% { transform: scale(0.5); opacity: 0.25; }
+  40% { transform: scale(1); opacity: 1; }
+}
+`;
+
+const globalStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+  .module-card-wrapper { animation: fadeUp 0.4s ease both; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+`;

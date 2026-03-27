@@ -163,7 +163,7 @@ If AUDIO is highest:
 • The audio is NOT just a summary or a simplified version of the text. It should provide a full explanation of the concept, with examples, analogies, and intuitive reasoning to help the learner grasp the material deeply.
 
 If AUDIO is second:
-• Keep explanations clear and concise 
+• Keep explanations clear and concise
 • Use audio to clarify complex concepts or provide additional insights.
 • It is should summarize the main points of the chapter, but also provide additional insights, examples, or intuitive explanations from the text. 
 • This audio should work as a gist to the text and visual content, the length should be not more than 2/3 of the time it would take to read the text content. It should not be too brief.

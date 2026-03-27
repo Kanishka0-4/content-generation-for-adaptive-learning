@@ -134,7 +134,8 @@ If Exam is NOT "None":
 
 If Exam is "None":
 
-• Organize modules using standard university-level subject structure  
+• Organize modules using standard university-level subject structure 
+• The content should be elaboarate and comprehensive, covering all key topics and subtopics relevant to the subject
 • Do NOT include PYQs anywhere  
 
 --------------------------------------------------
@@ -168,22 +169,26 @@ CONTENT GRANULARITY RULE:
 If duration is SHORT (≤ 4 weeks):
 • Combine topics
 • Focus only on important concepts
-• Fewer subtopics
+• Don't leave content too sparse
+• Avoid overly broad modules but the over all module should cover all the important topics
 
 If duration is MEDIUM (1–3 months):
 • Balanced coverage
 • Moderate depth
 • Structured subtopics
+• Sub topics should not be too less but enough to cover the important topics and according to the time available
 
 If duration is LONG (≥ 3 months):
 • Deep coverage
 • Break into fine-grained subtopics
 • Detailed conceptual flow
+• Include advanced topics if relevant
+• Sub topics should be detailed and cover all the important topics according to the time available
 
 SUBTOPIC DENSITY RULE:
 
-• Short duration → fewer subtopics  
-• Long duration → more detailed subtopics  
+• Short duration → fewer subtopics but still cover all important areas
+• Long duration → more detailed subtopics 
 
 --------------------------------------------------
 
@@ -198,11 +203,6 @@ Each module MUST contain:
 --------------------------------------------------
 
 6. FINAL MODULE RULES
-
-If Exam is "None":
-
-• Last module = revision + practice ONLY  
-• NO PYQs  
 
 If Exam exists:
 
