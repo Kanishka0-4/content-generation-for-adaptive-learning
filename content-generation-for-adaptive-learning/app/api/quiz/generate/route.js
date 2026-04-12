@@ -216,7 +216,7 @@ export async function POST(req) {
     /* ================= VISUAL ================= */
     const visualData = await generateVisualContent(topicVisual, subjectName);
     items.push(
-      await saveItem("visual", JSON.stringify({ steps: visualData.steps })),
+      await saveItem("visual", JSON.stringify({ steps: visualData.steps,  topic: topicVisual,  subject: subjectName, })),
     );
 
     const visualText = visualData.steps.join(" ");

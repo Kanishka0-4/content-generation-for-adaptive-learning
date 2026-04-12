@@ -10,6 +10,20 @@ const pool = new Pool({
 export async function POST(request) {
   try {
     const { name, email, password } = await request.json();
+
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])[^\s]{8,}$/;
+
+    if (!password || !passwordRegex.test(password)) {
+      return NextResponse.json(
+        {
+          error:
+            "Password must be at least 8 characters long and include uppercase, lowercase, number, special character and no spaces",
+        },
+        { status: 400 },
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // ✅ Basic format check

@@ -14,19 +14,97 @@ function speak(text, onEnd) {
   window.speechSynthesis.speak(u);
 }
 
+function AudioItem({ item, onNext }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasFinished, setHasFinished] = useState(false);
+
+  const handlePlay = () => {
+    setIsPlaying(true);
+    speak(item.question_text, () => {
+      setIsPlaying(false);
+      setHasFinished(true);
+      onNext();
+    });
+  };
+
+  return (
+    <>
+      <span className="qt-badge qt-badge-green">
+        <span className="qt-badge-dot" style={{ background: "#16a34a" }} />
+        Audio
+      </span>
+      <div className="qt-audio-box">
+        <div className="qt-audio-icon">🎧</div>
+        <p style={{ fontSize: "0.9rem", color: "#15803d", fontWeight: 500 }}>
+          {isPlaying ? "Listen carefully…" : "Press play when you're ready"}
+        </p>
+        {isPlaying ? (
+          <div
+            style={{
+              display: "flex",
+              gap: "4px",
+              alignItems: "center",
+              height: 28,
+            }}
+          >
+            {[1, 2, 3, 4, 5].map((b) => (
+              <div
+                key={b}
+                className="qt-wave-bar"
+                style={{
+                  height: `${8 + b * 4}px`,
+                  animationDelay: `${b * 0.12}s`,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <button
+            onClick={handlePlay}
+            disabled={hasFinished}
+            style={{
+              marginTop: "0.5rem",
+              padding: "0.6rem 1.6rem",
+              borderRadius: "999px",
+              border: "none",
+              background: hasFinished
+                ? "#d1fae5"
+                : "linear-gradient(135deg, #10b981, #34d399)",
+              color: hasFinished ? "#065f46" : "#fff",
+              fontFamily: "'Instrument Sans', sans-serif",
+              fontWeight: 600,
+              fontSize: "0.9rem",
+              cursor: hasFinished ? "default" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              boxShadow: hasFinished
+                ? "none"
+                : "0 4px 12px rgba(16,185,129,0.3)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            {hasFinished ? "✓ Done" : "▶ Play"}
+          </button>
+        )}
+      </div>
+    </>
+  );
+}
+
 export default function QuizTakePage() {
   const router = useRouter();
 
-  const [loading, setLoading]         = useState(true);
-  const [quizId, setQuizId]           = useState(null);
-  const [items, setItems]             = useState([]);
-  const [pointer, setPointer]         = useState(0);
-  const [stageType, setStageType]     = useState(null);
-  const [timer, setTimer]             = useState(CONTENT_SECONDS);
+  const [loading, setLoading] = useState(true);
+  const [quizId, setQuizId] = useState(null);
+  const [items, setItems] = useState([]);
+  const [pointer, setPointer] = useState(0);
+  const [stageType, setStageType] = useState(null);
+  const [timer, setTimer] = useState(CONTENT_SECONDS);
   const [contentReady, setContentReady] = useState(false);
 
-  const answerStartRef  = useRef(null);
-  const initializedRef  = useRef(false);
+  const answerStartRef = useRef(null);
+  const initializedRef = useRef(false);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -67,7 +145,10 @@ export default function QuizTakePage() {
   useEffect(() => {
     if (!contentReady) return;
     if (stageType === "mcq" || stageType === "audio") return;
-    if (timer <= 0) { nextItem(); return; }
+    if (timer <= 0) {
+      nextItem();
+      return;
+    }
     const t = setTimeout(() => setTimer((p) => p - 1), 1000);
     return () => clearTimeout(t);
   }, [timer, stageType, contentReady]);
@@ -85,14 +166,20 @@ export default function QuizTakePage() {
         time_taken_ms: Date.now() - answerStartRef.current,
       }),
     });
-    if (!res.ok) { console.error("Answer save failed"); return false; }
+    if (!res.ok) {
+      console.error("Answer save failed");
+      return false;
+    }
     return true;
   }
 
   function nextItem() {
     window.speechSynthesis.cancel();
     const next = pointer + 1;
-    if (next >= items.length) { router.push("/quiz/results"); return; }
+    if (next >= items.length) {
+      router.push("/quiz/results");
+      return;
+    }
     setPointer(next);
     setStageType(items[next].type);
     setTimer(CONTENT_SECONDS);
@@ -107,17 +194,28 @@ export default function QuizTakePage() {
           @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&family=Instrument+Sans:wght@300;400;500&display=swap');
           @keyframes spin { to { transform: rotate(360deg); } }
         `}</style>
-        <div style={{
-          minHeight: "100vh", display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center",
-          background: "#fffaf5", fontFamily: "'Instrument Sans', sans-serif",
-          gap: "1rem",
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: "50%",
-            border: "3px solid #fed7aa", borderTop: "3px solid #f97316",
-            animation: "spin 0.8s linear infinite",
-          }}/>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#fffaf5",
+            fontFamily: "'Instrument Sans', sans-serif",
+            gap: "1rem",
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              border: "3px solid #fed7aa",
+              borderTop: "3px solid #f97316",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
           <p style={{ fontSize: "1rem", color: "#92400e", fontWeight: 500 }}>
             Preparing your quiz…
           </p>
@@ -126,9 +224,9 @@ export default function QuizTakePage() {
     );
   }
 
-  const current    = items[pointer];
-  const progress   = ((pointer + 1) / items.length) * 100;
-  const isContent  = stageType !== "mcq" && stageType !== "audio";
+  const current = items[pointer];
+  const progress = ((pointer + 1) / items.length) * 100;
+  const isContent = stageType !== "mcq" && stageType !== "audio";
 
   return (
     <>
@@ -329,7 +427,9 @@ export default function QuizTakePage() {
             <div className="qt-brand-dot" />
             Quiz
           </div>
-          <div className="qt-counter">{pointer + 1} / {items.length}</div>
+          <div className="qt-counter">
+            {pointer + 1} / {items.length}
+          </div>
         </div>
 
         {/* Progress bar */}
@@ -355,49 +455,63 @@ export default function QuizTakePage() {
 
 /* ── Item View ── */
 function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
-  useEffect(() => {
+  /* useEffect(() => {
     if (item.type === "audio") speak(item.question_text, () => onNext());
     return () => window.speechSynthesis.cancel();
-  }, [item]);
+  }, [item]);*/
 
   const LETTERS = ["A", "B", "C", "D"];
 
   /* AUDIO */
   if (item.type === "audio") {
-    return (
-      <>
-        <span className="qt-badge qt-badge-green">
-          <span className="qt-badge-dot" style={{ background: "#16a34a" }} />
-          Audio
-        </span>
-        <div className="qt-audio-box">
-          <div className="qt-audio-icon">🎧</div>
-          <p style={{ fontSize: "0.9rem", color: "#15803d", fontWeight: 500 }}>
-            Listen carefully…
-          </p>
-          <div style={{ display: "flex", gap: "4px", alignItems: "center", height: 28 }}>
-            {[1,2,3,4,5].map((b) => (
-              <div key={b} className="qt-wave-bar" style={{
-                height: `${8 + b * 4}px`,
-                animationDelay: `${b * 0.12}s`,
-              }}/>
-            ))}
-          </div>
-        </div>
-      </>
-    );
+    return <AudioItem item={item} onNext={onNext} />;
   }
 
-   /* VISUAL */
+  /* VISUAL */
   if (item.type === "visual") {
     let parsed = null;
-    try { parsed = JSON.parse(item.question_text); } catch {}
+    try {
+      parsed = JSON.parse(item.question_text);
+    } catch {}
     return (
       <>
         <span className="qt-badge qt-badge-blue">
           <span className="qt-badge-dot" style={{ background: "#2563eb" }} />
           Visual
         </span>
+
+        {(parsed?.subject || parsed?.topic) && (
+          <div style={{ marginBottom: "1.5rem" }}>
+            {parsed.subject && (
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  color: "#94a3b8",
+                  marginBottom: "0.25rem",
+                }}
+              >
+                {parsed.subject}
+              </p>
+            )}
+            {parsed.topic && (
+              <p
+                style={{
+                  fontFamily: "'Bricolage Grotesque', sans-serif",
+                  fontSize: "1.1rem",
+                  fontWeight: 700,
+                  color: "#1e293b",
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {parsed.topic}
+              </p>
+            )}
+          </div>
+        )}
+
         {isContent && (
           <div className="qt-timer">
             <div className="qt-timer-inner">{timer}</div>
@@ -406,20 +520,54 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
         {parsed?.steps ? (
           <div className="qt-visual-steps">
             {parsed.steps.map((s, i) => {
-              const colors = ["#6366f1","#0891b2","#059669","#d97706","#8b5cf6","#e11d48"];
-              const bgs    = ["#eef2ff","#ecfeff","#f0fdf4","#fffbeb","#faf5ff","#fff1f2"];
-              const color  = colors[i % colors.length];
-              const bg     = bgs[i % bgs.length];
-              const last   = i === parsed.steps.length - 1;
+              const colors = [
+                "#6366f1",
+                "#0891b2",
+                "#059669",
+                "#d97706",
+                "#8b5cf6",
+                "#e11d48",
+              ];
+              const bgs = [
+                "#eef2ff",
+                "#ecfeff",
+                "#f0fdf4",
+                "#fffbeb",
+                "#faf5ff",
+                "#fff1f2",
+              ];
+              const color = colors[i % colors.length];
+              const bg = bgs[i % bgs.length];
+              const last = i === parsed.steps.length - 1;
               return (
                 <div key={i} className="qt-step-node">
                   <div className="qt-step-spine">
-                    <div className="qt-step-circle" style={{ background: color, boxShadow: `0 2px 8px ${color}40` }}>
+                    <div
+                      className="qt-step-circle"
+                      style={{
+                        background: color,
+                        boxShadow: `0 2px 8px ${color}40`,
+                      }}
+                    >
                       {i + 1}
                     </div>
-                    {!last && <div className="qt-step-line" style={{ background: `linear-gradient(${color}60, ${colors[(i+1) % colors.length]}40)` }} />}
+                    {!last && (
+                      <div
+                        className="qt-step-line"
+                        style={{
+                          background: `linear-gradient(${color}60, ${colors[(i + 1) % colors.length]}40)`,
+                        }}
+                      />
+                    )}
                   </div>
-                  <div className="qt-step-card" style={{ background: bg, borderColor: color, color: "#1e293b" }}>
+                  <div
+                    className="qt-step-card"
+                    style={{
+                      background: bg,
+                      borderColor: color,
+                      color: "#1e293b",
+                    }}
+                  >
                     {s}
                   </div>
                 </div>
@@ -432,7 +580,7 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
       </>
     );
   }
- 
+
   /* TEXT content (non-MCQ) */
   if (item.type !== "mcq") {
     return (
@@ -450,7 +598,6 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
       </>
     );
   }
-
 
   /* MCQ */
   return (
@@ -475,7 +622,6 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
           </button>
         ))}
       </div>
-      <button className="qt-skip" onClick={onNext}>Skip →</button>
     </>
   );
 }

@@ -18,10 +18,53 @@ export default function AuthForm({ type }) {
     if (e.target.name === "email") {
       const email = updatedForm.email;
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) { setError("Invalid email format"); return; }
-      const allowedDomains = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com"];
+      if (!emailRegex.test(email)) {
+        setError("Invalid email format");
+        return;
+      }
+      const allowedDomains = [
+        "gmail.com",
+        "yahoo.com",
+        "outlook.com",
+        "hotmail.com",
+        "icloud.com",
+      ];
       const domain = email.split("@")[1]?.toLowerCase();
-      if (domain && !allowedDomains.includes(domain)) { setError("Use Gmail, Yahoo, Outlook, etc."); return; }
+      if (domain && !allowedDomains.includes(domain)) {
+        setError("Use Gmail, Yahoo, Outlook, etc.");
+        return;
+      }
+    }
+
+    if (e.target.name === "password") {
+      const password = updatedForm.password;
+
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters");
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        setError("Must include uppercase letter");
+        return;
+      }
+      if (!/[a-z]/.test(password)) {
+        setError("Must include lowercase letter");
+        return;
+      }
+      if (!/\d/.test(password)) {
+        setError("Must include a number");
+        return;
+      }
+      if (!/[^A-Za-z0-9\s]/.test(password)) {
+        setError("Must include a special character");
+        return;
+      }
+
+      if (/\s/.test(password)) {
+        setError("Password should not contain spaces");
+        return;
+      }
+
       setError("");
     }
   };
@@ -32,12 +75,35 @@ export default function AuthForm({ type }) {
     setError("");
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) { setError("Invalid email format"); setLoading(false); return; }
+    if (!emailRegex.test(form.email)) {
+      setError("Invalid email format");
+      setLoading(false);
+      return;
+    }
 
-    const allowedDomains = ["gmail.com","yahoo.com","outlook.com","hotmail.com","icloud.com"];
-    const domain = form.email.split("@")[1].toLowerCase();
+    const allowedDomains = [
+      "gmail.com",
+      "yahoo.com",
+      "outlook.com",
+      "hotmail.com",
+      "icloud.com",
+    ];
+    const domain = form.email.split("@")[1]?.toLowerCase();
     if (!allowedDomains.includes(domain)) {
-      setError("Please use a valid email provider (Gmail, Yahoo, Outlook, etc.)");
+      setError(
+        "Please use a valid email provider (Gmail, Yahoo, Outlook, etc.)",
+      );
+      setLoading(false);
+      return;
+    }
+
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])[^\s]{8,}$/;
+
+    if (!form.password || !passwordRegex.test(form.password)) {
+      setError(
+        "Password must be 8+ chars, include uppercase, lowercase, number, special character and no spaces",
+      );
       setLoading(false);
       return;
     }
@@ -49,7 +115,7 @@ export default function AuthForm({ type }) {
         body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Something went wrong");
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
       localStorage.setItem("token", data.token);
       if (isLogin) {
         router.push(data.quiz_completed === false ? "/quiz/welcome" : "/");
@@ -294,7 +360,6 @@ export default function AuthForm({ type }) {
       `}</style>
 
       <div className="auth-root">
-
         {/* ── Left panel ── */}
         <div className="auth-left">
           <div className="auth-blob auth-blob-1" />
@@ -307,23 +372,34 @@ export default function AuthForm({ type }) {
               Tri-Sara
             </div>
             <h1 className="auth-left-headline">
-              Learning that<br />
+              Learning that
+              <br />
               adapts to <span>you</span>
             </h1>
             <p className="auth-left-sub">
-              Your personalized learning companion — adapting every lesson to how you learn best.
+              Your personalized learning companion — adapting every lesson to
+              how you learn best.
             </p>
             <div className="auth-pills">
               <div className="auth-pill">
-                <div className="auth-pill-dot" style={{ background: "#f97316" }} />
+                <div
+                  className="auth-pill-dot"
+                  style={{ background: "#f97316" }}
+                />
                 Visual learning
               </div>
               <div className="auth-pill">
-                <div className="auth-pill-dot" style={{ background: "#3b82f6" }} />
+                <div
+                  className="auth-pill-dot"
+                  style={{ background: "#3b82f6" }}
+                />
                 Audio learning
               </div>
               <div className="auth-pill">
-                <div className="auth-pill-dot" style={{ background: "#10b981" }} />
+                <div
+                  className="auth-pill-dot"
+                  style={{ background: "#10b981" }}
+                />
                 Text learning
               </div>
             </div>
@@ -333,7 +409,6 @@ export default function AuthForm({ type }) {
         {/* ── Right panel ── */}
         <div className="auth-right">
           <div className="auth-card">
-
             <div className="auth-mobile-brand">
               <div className="auth-brand-dot" />
               Tri-Sara
@@ -355,7 +430,6 @@ export default function AuthForm({ type }) {
 
             <div className="auth-form-card">
               <form onSubmit={handleSubmit}>
-
                 {!isLogin && (
                   <div className="auth-field">
                     <label className="auth-label">Full Name</label>
@@ -400,17 +474,29 @@ export default function AuthForm({ type }) {
                 {error && (
                   <div className="auth-error">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                      <circle cx="7" cy="7" r="6.5" stroke="#dc2626"/>
-                      <path d="M7 4v3.5M7 9.5v.5" stroke="#dc2626" strokeWidth="1.2" strokeLinecap="round"/>
+                      <circle cx="7" cy="7" r="6.5" stroke="#dc2626" />
+                      <path
+                        d="M7 4v3.5M7 9.5v.5"
+                        stroke="#dc2626"
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
                     </svg>
                     {error}
                   </div>
                 )}
 
-                <button className="auth-submit" type="submit" disabled={loading}>
-                  {loading ? "Please wait..." : isLogin ? "Sign in →" : "Create account →"}
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Please wait..."
+                    : isLogin
+                      ? "Sign in →"
+                      : "Create account →"}
                 </button>
-
               </form>
             </div>
 
@@ -421,15 +507,15 @@ export default function AuthForm({ type }) {
             </div>
 
             <p className="auth-footer">
-              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              {isLogin
+                ? "Don't have an account? "
+                : "Already have an account? "}
               <a href={isLogin ? "/signup" : "/login"}>
                 {isLogin ? "Sign up free" : "Sign in"}
               </a>
             </p>
-
           </div>
         </div>
-
       </div>
     </>
   );
