@@ -453,13 +453,46 @@ export default function QuizTakePage() {
   );
 }
 
+function McqItem({ item, onSaveAnswer, onNext }) {
+  const LETTERS = ["A", "B", "C", "D"];
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <>
+      <span className="qt-badge qt-badge-orange">
+        <span className="qt-badge-dot" style={{ background: "#ea580c" }} />
+        Question
+      </span>
+      <p className="qt-question">{item.question_text}</p>
+      <div>
+        {item.options.map((o, idx) => (
+          <button
+            key={o}
+            className="qt-option"
+            disabled={saving}
+            style={{
+              opacity: saving ? 0.5 : 1,
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+            onClick={async () => {
+              if (saving) return;
+              setSaving(true);
+              const ok = await onSaveAnswer(idx);
+              if (ok) onNext();
+              setSaving(false);
+            }}
+          >
+            <span className="qt-option-letter">{LETTERS[idx]}</span>
+            {o}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 /* ── Item View ── */
 function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
-  /* useEffect(() => {
-    if (item.type === "audio") speak(item.question_text, () => onNext());
-    return () => window.speechSynthesis.cancel();
-  }, [item]);*/
-
   const LETTERS = ["A", "B", "C", "D"];
 
   /* AUDIO */
@@ -467,119 +500,224 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
     return <AudioItem item={item} onNext={onNext} />;
   }
 
-  /* VISUAL */
-  if (item.type === "visual") {
-    let parsed = null;
-    try {
-      parsed = JSON.parse(item.question_text);
-    } catch {}
-    return (
-      <>
-        <span className="qt-badge qt-badge-blue">
-          <span className="qt-badge-dot" style={{ background: "#2563eb" }} />
-          Visual
-        </span>
 
-        {(parsed?.subject || parsed?.topic) && (
-          <div style={{ marginBottom: "1.5rem" }}>
-            {parsed.subject && (
-              <p
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  color: "#94a3b8",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                {parsed.subject}
-              </p>
-            )}
-            {parsed.topic && (
-              <p
-                style={{
-                  fontFamily: "'Bricolage Grotesque', sans-serif",
-                  fontSize: "1.1rem",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {parsed.topic}
-              </p>
-            )}
-          </div>
-        )}
+/* VISUAL */
+if (item.type === "visual") {
+  let parsed = null;
+  try { parsed = JSON.parse(item.question_text); } catch {}
 
-        {isContent && (
-          <div className="qt-timer">
-            <div className="qt-timer-inner">{timer}</div>
-          </div>
-        )}
-        {parsed?.steps ? (
-          <div className="qt-visual-steps">
-            {parsed.steps.map((s, i) => {
-              const colors = [
-                "#6366f1",
-                "#0891b2",
-                "#059669",
-                "#d97706",
-                "#8b5cf6",
-                "#e11d48",
-              ];
-              const bgs = [
-                "#eef2ff",
-                "#ecfeff",
-                "#f0fdf4",
-                "#fffbeb",
-                "#faf5ff",
-                "#fff1f2",
-              ];
-              const color = colors[i % colors.length];
-              const bg = bgs[i % bgs.length];
-              const last = i === parsed.steps.length - 1;
-              return (
-                <div key={i} className="qt-step-node">
-                  <div className="qt-step-spine">
-                    <div
-                      className="qt-step-circle"
-                      style={{
-                        background: color,
-                        boxShadow: `0 2px 8px ${color}40`,
-                      }}
-                    >
-                      {i + 1}
-                    </div>
-                    {!last && (
-                      <div
-                        className="qt-step-line"
-                        style={{
-                          background: `linear-gradient(${color}60, ${colors[(i + 1) % colors.length]}40)`,
-                        }}
-                      />
-                    )}
+  const colors = ["#6366f1","#0891b2","#059669","#d97706","#8b5cf6","#e11d48"];
+  const bgs    = ["#eef2ff","#ecfeff","#f0fdf4","#fffbeb","#faf5ff","#fff1f2"];
+
+  const renderVisual = () => {
+    if (!parsed?.data) return <p className="qt-content-text">{item.question_text}</p>;
+
+    /* ── FLOW ── */
+    if (parsed.type === "flow") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+          {parsed.data.map((d, i) => {
+            const color  = colors[i % colors.length];
+            const bg     = bgs[i % bgs.length];
+            const isLast = i === parsed.data.length - 1;
+            return (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+                <div style={{
+                  width: "100%", maxWidth: 480,
+                  background: bg, border: `2px solid ${color}`,
+                  borderRadius: 12, padding: "0.75rem 1.25rem",
+                }}>
+                  <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "0.85rem", fontWeight: 700, color, marginBottom: "0.2rem" }}>
+                    {d.step}
+                  </p>
+                  <p style={{ fontSize: "0.8rem", color: "#475569", lineHeight: 1.5 }}>{d.description}</p>
+                </div>
+                {!isLast && (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "0.2rem 0" }}>
+                    <div style={{ width: 2, height: 16, background: color, opacity: 0.4 }} />
+                    <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${color}`, opacity: 0.5 }} />
                   </div>
-                  <div
-                    className="qt-step-card"
-                    style={{
-                      background: bg,
-                      borderColor: color,
-                      color: "#1e293b",
-                    }}
-                  >
-                    {s}
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ── CYCLE ── */
+    if (parsed.type === "cycle") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+          {parsed.data.map((d, i) => {
+            const color  = colors[i % colors.length];
+            const bg     = bgs[i % bgs.length];
+            const isLast = i === parsed.data.length - 1;
+            return (
+              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+                <div style={{
+                  width: "100%", maxWidth: 480,
+                  background: bg, border: `2px solid ${color}`,
+                  borderRadius: 12, padding: "0.75rem 1.25rem",
+                  display: "flex", alignItems: "center", gap: "0.75rem",
+                }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: "50%",
+                    background: color, color: "#fff", flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: "'Bricolage Grotesque', sans-serif",
+                    fontSize: "0.75rem", fontWeight: 800,
+                  }}>
+                    {i + 1}
+                  </div>
+                  <div>
+                    <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "0.85rem", fontWeight: 700, color, marginBottom: "0.15rem" }}>
+                      {d.step}
+                    </p>
+                    <p style={{ fontSize: "0.8rem", color: "#475569", lineHeight: 1.5 }}>{d.description}</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="qt-content-text">{item.question_text}</p>
-        )}
-      </>
-    );
-  }
+                {!isLast ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "0.2rem 0" }}>
+                    <div style={{ width: 2, height: 16, background: color, opacity: 0.4 }} />
+                    <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: `8px solid ${color}`, opacity: 0.5 }} />
+                  </div>
+                ) : (
+                  <div style={{ marginTop: "0.5rem", fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                    ↺ cycle repeats
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ── HIERARCHY ── */
+    if (parsed.type === "hierarchy") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+          {parsed.data.map((parent, i) => {
+            const color = colors[i % colors.length];
+            const bg    = bgs[i % bgs.length];
+            return (
+              <div key={i}>
+                <div style={{
+                  background: color, borderRadius: 10,
+                  padding: "0.65rem 1rem", marginBottom: "0.4rem",
+                }}>
+                  <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "0.88rem", fontWeight: 700, color: "#fff", marginBottom: "0.15rem" }}>
+                    {parent.name}
+                  </p>
+                  {parent.description && (
+                    <p style={{ fontSize: "0.78rem", color: "rgba(255,255,255,0.85)", lineHeight: 1.4 }}>{parent.description}</p>
+                  )}
+                </div>
+                {(parent.children || []).map((child, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", marginLeft: "1.25rem", marginBottom: "0.35rem" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 6 }}>
+                      <div style={{ width: 2, height: 10, background: color, opacity: 0.4 }} />
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, opacity: 0.7 }} />
+                    </div>
+                    <div style={{
+                      flex: 1, background: bg,
+                      border: `1.5px solid ${color}40`,
+                      borderRadius: 8, padding: "0.5rem 0.85rem",
+                    }}>
+                      <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "0.82rem", fontWeight: 700, color, marginBottom: "0.1rem" }}>
+                        {child.name}
+                      </p>
+                      {child.description && (
+                        <p style={{ fontSize: "0.78rem", color: "#475569", lineHeight: 1.4 }}>{child.description}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ── COMPARISON ── */
+    if (parsed.type === "comparison") {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", width: "100%" }}>
+          {parsed.data.map((item, i) => {
+            const color = colors[i % colors.length];
+            const bg    = bgs[i % bgs.length];
+            return (
+              <div key={i} style={{
+                background: bg, border: `2px solid ${color}`,
+                borderRadius: 12, padding: "0.85rem 1.1rem",
+              }}>
+                <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "0.9rem", fontWeight: 700, color, marginBottom: "0.5rem" }}>
+                  {item.concept}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: item.example ? "0.5rem" : 0 }}>
+                  {(item.features || []).map((f, fi) => (
+                    <div key={fi} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                      <div style={{ width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0, marginTop: 6 }} />
+                      <p style={{ fontSize: "0.8rem", color: "#334155", lineHeight: 1.5 }}>{f}</p>
+                    </div>
+                  ))}
+                </div>
+                {item.example && (
+                  <div style={{
+                    marginTop: "0.5rem", padding: "0.4rem 0.75rem",
+                    background: "#fff", borderRadius: 6,
+                    border: `1px solid ${color}30`,
+                  }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color, letterSpacing: "0.05em", textTransform: "uppercase" }}>Example: </span>
+                    <span style={{ fontSize: "0.78rem", color: "#475569" }}>{item.example}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    return <p className="qt-content-text">{item.question_text}</p>;
+  };
+
+  return (
+    <>
+      <span className="qt-badge qt-badge-blue">
+        <span className="qt-badge-dot" style={{ background: "#2563eb" }} />
+        Visual
+      </span>
+
+      {(parsed?.subject || parsed?.topic) && (
+        <div style={{ marginBottom: "1.25rem" }}>
+          {parsed.subject && (
+            <p style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "#94a3b8", marginBottom: "0.25rem" }}>
+              {parsed.subject}
+            </p>
+          )}
+          {parsed.topic && (
+            <p style={{ fontFamily: "'Bricolage Grotesque', sans-serif", fontSize: "1.1rem", fontWeight: 700, color: "#1e293b", letterSpacing: "-0.01em" }}>
+              {parsed.topic}
+            </p>
+          )}
+        </div>
+      )}
+
+      {isContent && (
+        <div className="qt-timer">
+          <div className="qt-timer-inner">{timer}</div>
+        </div>
+      )}
+
+      {renderVisual()}
+    </>
+  );
+}
+
+
 
   /* TEXT content (non-MCQ) */
   if (item.type !== "mcq") {
@@ -600,28 +738,5 @@ function ItemView({ item, stageType, timer, isContent, onNext, onSaveAnswer }) {
   }
 
   /* MCQ */
-  return (
-    <>
-      <span className="qt-badge qt-badge-orange">
-        <span className="qt-badge-dot" style={{ background: "#ea580c" }} />
-        Question
-      </span>
-      <p className="qt-question">{item.question_text}</p>
-      <div>
-        {item.options.map((o, idx) => (
-          <button
-            key={o}
-            className="qt-option"
-            onClick={async () => {
-              const ok = await onSaveAnswer(idx);
-              if (ok) onNext();
-            }}
-          >
-            <span className="qt-option-letter">{LETTERS[idx]}</span>
-            {o}
-          </button>
-        ))}
-      </div>
-    </>
-  );
+  return <McqItem item={item} onSaveAnswer={onSaveAnswer} onNext={onNext} />;
 }

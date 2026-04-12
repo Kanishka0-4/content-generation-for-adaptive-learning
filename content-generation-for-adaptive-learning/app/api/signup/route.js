@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -23,8 +24,6 @@ export async function POST(request) {
         { status: 400 },
       );
     }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
 
     // ✅ Basic format check
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,12 +66,32 @@ export async function POST(request) {
       );
     }
 
-    await pool.query(
-      "INSERT INTO users (name, email, password) VALUES ($1, $2, $3)",
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+      "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id",
       [name, email, hashedPassword],
     );
+    const userId = result.rows[0].id;
 
-    return NextResponse.json({ success: true });
+     const token = jwt.sign(
+      { id: userId },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+
+    const response = NextResponse.json({ success: true, token });
+
+    response.cookies.set("auth_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 7*24*60*60, // 7 days
+    });
+
+    return response;
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Signup failed" }, { status: 500 });

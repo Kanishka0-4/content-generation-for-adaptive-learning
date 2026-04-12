@@ -12,38 +12,38 @@ export async function POST(req) {
     const token = cookieStore.get("auth_token")?.value;
 
     if (!token) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const userId = decodeAuthToken(token);
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Invalid token" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
     /* ===== FETCH QUIZ DATA ===== */
     const rows = await pool.query(
       `
-      SELECT
-        qi.id,
-        qi.mcq_type,
-        qa.is_correct,
-        qa.time_taken_ms
-      FROM quiz_items qi
-      LEFT JOIN quiz_answers qa 
-        ON qa.quiz_item_id = qi.id
-       AND qa.user_id = $2
-      WHERE qi.quiz_id = $1::uuid
-        AND qi.content_type = 'mcq'
-      ORDER BY qi.created_at
-      `,
-      [quiz_id, userId]
+  SELECT
+    qi.id,
+    qi.mcq_type,
+    qa.is_correct,
+    qa.time_taken_ms
+  FROM quiz_items qi
+  INNER JOIN (
+    SELECT DISTINCT ON (quiz_item_id)
+      quiz_item_id,
+      is_correct,
+      time_taken_ms
+    FROM quiz_answers
+    WHERE user_id = $2
+    ORDER BY quiz_item_id, answered_at DESC
+  ) qa ON qa.quiz_item_id = qi.id
+  WHERE qi.quiz_id = $1::uuid
+    AND qi.content_type = 'mcq'
+  ORDER BY qi.created_at
+  `,
+      [quiz_id, userId],
     );
 
     /* ===== INITIAL STATS ===== */
@@ -92,8 +92,7 @@ export async function POST(req) {
     }
 
     /* ===== CALCULATE PERCENTAGES ===== */
-    const totalScore =
-      scores.text + scores.audio + scores.visual || 1;
+    const totalScore = scores.text + scores.audio + scores.visual || 1;
 
     const percentages = {
       text: Math.round((scores.text / totalScore) * 100),
@@ -102,9 +101,7 @@ export async function POST(req) {
     };
 
     /* ===== DETERMINE BEST STYLE ===== */
-    const best = Object.entries(scores).sort(
-      (a, b) => b[1] - a[1]
-    )[0][0];
+    const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0][0];
 
     /* ===== SAVE RESULT ===== */
     await pool.query(
@@ -115,11 +112,7 @@ export async function POST(req) {
           quiz_completed = TRUE
       WHERE id = $3
       `,
-      [
-        best,
-        JSON.stringify(percentages),
-        userId
-      ]
+      [best, JSON.stringify(percentages), userId],
     );
 
     /* ===== RESPONSE ===== */
@@ -129,13 +122,9 @@ export async function POST(req) {
       percentages,
       best_learning_style: best,
     });
-
   } catch (err) {
     console.error("Quiz result error:", err);
 
-    return NextResponse.json(
-      { error: err.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -31,11 +31,14 @@ Then generate EXACTLY 3 MCQs.
 MCQs must be answerable ONLY from the explanation.
 DO NOT introduce new algorithms or ideas.
 
+
+IMPORTANT: The "answer" field must EXACTLY match one of the strings in "options".
+
 JSON:
 {
   "text": "...",
   "mcqs": [
-    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
   ]
 }
 `;
@@ -53,37 +56,103 @@ ONLY include concepts you will test.
 Then generate EXACTLY 3 MCQs.
 MCQs must NOT introduce new concepts.
 
+IMPORTANT: The "answer" field must EXACTLY match one of the strings in "options".
+
 JSON:
 {
   "script": "...",
   "mcqs": [
-    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
   ]
 }
 `;
   return await askGroq(prompt);
 }
+
 
 async function generateVisualContent(topic, subjectName) {
   const prompt = `
 SUBJECT: "${subjectName}"
 SUBTOPIC: "${topic}"
 
-Explain visually using simple steps.
-ONLY include steps you will test.
+Choose the BEST visual type for this topic:
+- "flow" → for processes, sequences, cause-effect chains
+- "cycle" → for repeating/circular processes (water cycle, carbon cycle)
+- "hierarchy" → for classifications, taxonomies, parent-child relationships
+- "comparison" → for comparing 2-4 concepts, types, or categories
 
-Generate EXACTLY 3 MCQs based ONLY on the steps.
+Return ONLY valid JSON. No extra text.
 
-JSON:
+For "flow":
 {
-  "steps": ["Step 1", "Step 2", "Step 3"],
+  "type": "flow",
+  "title": "...",
+  "data": [
+    { "step": "short label", "description": "one sentence" }
+  ],
   "mcqs": [
-    { "q": "...", "options": ["A","B","C"], "answer": "A" }
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
   ]
 }
+
+For "cycle":
+{
+  "type": "cycle",
+  "title": "...",
+  "data": [
+    { "step": "short label", "description": "one sentence" }
+  ],
+  "mcqs": [
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
+  ]
+}
+
+For "hierarchy":
+{
+  "type": "hierarchy",
+  "title": "...",
+  "data": [
+    {
+      "name": "parent concept",
+      "description": "one sentence",
+      "children": [
+        { "name": "child", "description": "one sentence" }
+      ]
+    }
+  ],
+  "mcqs": [
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
+  ]
+}
+
+For "comparison":
+{
+  "type": "comparison",
+  "title": "...",
+  "data": [
+    {
+      "concept": "name",
+      "features": ["feature 1", "feature 2", "feature 3"],
+      "example": "one example"
+    }
+  ],
+  "mcqs": [
+    { "q": "...", "options": ["option text A", "option text B", "option text C"], "answer": "option text A" }
+  ]
+}
+
+RULES:
+- Pick the type that best matches the topic — do NOT always pick flow
+- ONLY include concepts you will test in MCQs
+- The "answer" field must EXACTLY match one of the strings in "options"
+- Keep labels short (3-5 words max)
+- Return ONLY the JSON object, nothing else
 `;
   return await askGroq(prompt);
 }
+
+
+
 
 /* ================= MCQ SCOPE CHECK ================= */
 function isMcqInScope(contentText, mcq) {
@@ -173,14 +242,30 @@ export async function POST(req) {
       correct = null,
       mcq_type = null,
     ) {
-      const answerMap = { A: 0, B: 1, C: 2 };
-      const correctIdx = correct !== null ? (answerMap[correct] ?? 0) : null;
+      let correctIdx = null;
+
+      if (correct !== null && options.length > 0) {
+        // Match answer text directly against options
+        const textMatch = options.findIndex(
+          (o) =>
+            o.trim().toLowerCase() === String(correct).trim().toLowerCase(),
+        );
+
+        if (textMatch !== -1) {
+          // Answer text matched an option directly
+          correctIdx = textMatch;
+        } else {
+          // Fallback: treat correct as a letter (A/B/C)
+          const answerMap = { A: 0, B: 1, C: 2 };
+          correctIdx = answerMap[correct] ?? 0;
+        }
+      }
 
       const r = await pool.query(
         `INSERT INTO quiz_items
-         (quiz_id, content_type, question_text, options, correct_option, mcq_type)
-         VALUES ($1,$2,$3,$4,$5,$6)
-         RETURNING id`,
+     (quiz_id, content_type, question_text, options, correct_option, mcq_type)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id`,
         [quizId, type, text, JSON.stringify(options), correctIdx, mcq_type],
       );
 
@@ -213,20 +298,42 @@ export async function POST(req) {
       items.push(await saveItem("mcq", q.q, q.options, q.answer, "audio"));
     }
 
-    /* ================= VISUAL ================= */
+   
+  //============= VISUAL==============
     const visualData = await generateVisualContent(topicVisual, subjectName);
-    items.push(
-      await saveItem("visual", JSON.stringify({ steps: visualData.steps,  topic: topicVisual,  subject: subjectName, })),
-    );
+items.push(
+  await saveItem("visual", JSON.stringify({
+    type: visualData.type,
+    title: visualData.title,
+    data: visualData.data,
+    topic: topicVisual,
+    subject: subjectName,
+  })),
+);
 
-    const visualText = visualData.steps.join(" ");
-    let visualMcqs = visualData.mcqs.filter((q) => isMcqInScope(visualText, q));
-    if (visualMcqs.length < 3) {
-      visualMcqs = await regenerateMcqsFromContent(visualText);
-    }
-    for (const q of visualMcqs.slice(0, 3)) {
-      items.push(await saveItem("mcq", q.q, q.options, q.answer, "visual"));
-    }
+const visualText = (() => {
+  if (!visualData.data) return "";
+  if (visualData.type === "comparison") {
+    return visualData.data.map(d =>
+      `${d.concept} ${(d.features || []).join(" ")} ${d.example || ""}`
+    ).join(" ");
+  }
+  if (visualData.type === "hierarchy") {
+    return visualData.data.map(d =>
+      `${d.name} ${d.description || ""} ${(d.children || []).map(c => `${c.name} ${c.description || ""}`).join(" ")}`
+    ).join(" ");
+  }
+  // flow and cycle
+  return visualData.data.map(d => `${d.step} ${d.description || ""}`).join(" ");
+})();
+
+let visualMcqs = visualData.mcqs.filter((q) => isMcqInScope(visualText, q));
+if (visualMcqs.length < 3) {
+  visualMcqs = await regenerateMcqsFromContent(visualText);
+}
+for (const q of visualMcqs.slice(0, 3)) {
+  items.push(await saveItem("mcq", q.q, q.options, q.answer, "visual"));
+}
 
     return NextResponse.json({ success: true, quiz_id: quizId, items });
   } catch (err) {
