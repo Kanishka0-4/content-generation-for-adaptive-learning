@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-
+import { useSearchParams } from "next/navigation";
 const CONTENT_SECONDS = 15;
 
 function speak(text, onEnd) {
@@ -92,9 +92,11 @@ function AudioItem({ item, onNext }) {
   );
 }
 
+
+
 export default function QuizTakePage() {
   const router = useRouter();
-
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [quizId, setQuizId] = useState(null);
   const [items, setItems] = useState([]);
@@ -111,7 +113,7 @@ export default function QuizTakePage() {
     initializedRef.current = true;
 
     async function init() {
-      const subjectId = localStorage.getItem("selected_subject_id");
+      const subjectId = searchParams.get("subject_id");
       const res = await fetch("/api/quiz/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -128,7 +130,7 @@ export default function QuizTakePage() {
       }
 
       const firstContentIndex = data.items.findIndex((i) => i.type !== "mcq");
-      localStorage.setItem("current_quiz_id", data.quiz_id);
+     
       setQuizId(data.quiz_id);
       setItems(data.items);
       setPointer(firstContentIndex);
@@ -177,7 +179,7 @@ export default function QuizTakePage() {
     window.speechSynthesis.cancel();
     const next = pointer + 1;
     if (next >= items.length) {
-      router.push("/quiz/results");
+      router.push(`/quiz/results?quiz_id=${quizId}`);
       return;
     }
     setPointer(next);

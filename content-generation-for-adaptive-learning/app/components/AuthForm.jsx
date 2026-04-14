@@ -116,7 +116,7 @@ export default function AuthForm({ type }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong");
-      localStorage.setItem("token", data.token);
+     
       if (isLogin) {
         router.push(data.quiz_completed === false ? "/quiz/welcome" : "/");
       } else {

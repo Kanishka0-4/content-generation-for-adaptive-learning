@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 export default function QuizResultsPage() {
   const [data, setData] = useState(null);
   const router = useRouter();
-
+  const searchParams = useSearchParams();
   useEffect(() => {
     async function fetchResults() {
-      const quizId = localStorage.getItem("current_quiz_id");
+      const quizId = searchParams.get("quiz_id");
       const res = await fetch("/api/quiz/results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

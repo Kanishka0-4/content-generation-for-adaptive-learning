@@ -37,8 +37,8 @@ export default function WelcomeQuizPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
-      localStorage.setItem("selected_subject_id", subjectObj.id);
-      router.push("/quiz/start");
+     router.push(`/quiz/start?subject_id=${subjectObj.id}`);
+      
     } catch (err) {
       console.error(err);
       setError(err.message || "Error");

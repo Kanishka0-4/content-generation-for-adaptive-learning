@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 export default function QuizStart() {
   const router = useRouter();
-  const subjectId = typeof window !== "undefined"
-    ? localStorage.getItem("selected_subject_id")
-    : null;
+  const searchParams = useSearchParams();
+  const subjectId = searchParams.get("subject_id");
 
   return (
     <>
@@ -178,7 +178,6 @@ export default function QuizStart() {
         </div>
 
         <div className="qs-card">
-
           <div className="qs-icon">🎯</div>
 
           <div className="qs-badge">
@@ -190,8 +189,8 @@ export default function QuizStart() {
             You're almost <span>there!</span>
           </h1>
           <p className="qs-sub">
-            Take this short quiz so we can understand your learning style
-            and unlock a fully personalized experience just for you.
+            Take this short quiz so we can understand your learning style and
+            unlock a fully personalized experience just for you.
           </p>
 
           {/* 3-step indicator */}
@@ -210,17 +209,21 @@ export default function QuizStart() {
 
           <div className="qs-divider" />
 
-          <button className="qs-btn" onClick={() => router.push("/quiz/take")}>
+          <button className="qs-btn" onClick={() => router.push(`/quiz/take?subject_id=${subjectId}`)}>
             Start the Quiz →
           </button>
 
           <div className="qs-note">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1a5 5 0 100 10A5 5 0 006 1zm0 4v3M6 4v.5" stroke="#cbd5e1" strokeWidth="1.2" strokeLinecap="round"/>
+              <path
+                d="M6 1a5 5 0 100 10A5 5 0 006 1zm0 4v3M6 4v.5"
+                stroke="#cbd5e1"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              />
             </svg>
             Only takes a few minutes
           </div>
-
         </div>
       </div>
     </>
